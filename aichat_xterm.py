@@ -1804,6 +1804,28 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
             'flat dense color=sky'
         ).tooltip('Toggle session info column')
 
+    # Background-download thinline: Model Dwnl runs in a thread and survives
+    # closed dialogs/tabs, so its progress lives here, always visible.
+    dl_wrap = ui.column().classes('w-full gap-0 px-1')
+    with dl_wrap:
+        dl_lbl = ui.label('').classes('text-xs font-mono text-sky-300')
+        dl_bar = ui.linear_progress(value=0.0, show_value=False).classes('w-full')
+    dl_wrap.visible = False
+
+    def _refresh_dl_bar():
+        try:
+            d = app_state.get("dl") or {}
+            if d.get('active'):
+                dl_wrap.visible = True
+                dl_bar.value = max(0.0, min(1.0, (d.get('pct') or 0) / 100.0))
+                dl_lbl.text = f"⬇️ {d.get('label', '')} — {d.get('pct', 0)}%"
+            else:
+                dl_wrap.visible = False
+        except Exception:
+            pass
+
+    ui.timer(1.0, _refresh_dl_bar)
+
     def _refresh_model_status():
         """Poll Ollama /api/ps and update the tiny header line. Auto-reflects
         a model loaded manually via `ollama run` — no reload needed."""
@@ -3478,10 +3500,31 @@ def _cc_download():
             import threading
 
             def _go():
+                def _prog(p):
+                    try:
+                        app_state["dl"] = {
+                            'pct': p,
+                            'label': f"{_repo['id']}/{_picked_file['name']}",
+                            'active': p < 100,
+                        }
+                    except Exception:
+                        pass
+                    try:
+                        prog_lbl.set_text(f'{p}%')
+                    except Exception:
+                        pass
                 ok, msg = _mc.download_hf_file(_repo['id'], _picked_file['name'], str(BASE_DIR),
                                                 auto_import=auto_imp.value,
                                                 delete_after=del_gguf.value,
-                                                on_progress=lambda p: prog_lbl.set_text(f'{p}%'))
+                                                on_progress=_prog)
+                try:
+                    app_state["dl"] = {
+                        'pct': 100 if ok else 0,
+                        'label': f"{_repo['id']}/{_picked_file['name']}",
+                        'active': False,
+                    }
+                except Exception:
+                    pass
                 ui.notify(msg, type='positive' if ok else 'negative', timeout=10000)
                 prog_lbl.text = 'done.' if ok else 'failed.'
             threading.Thread(target=_go, daemon=True).start()
