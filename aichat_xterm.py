@@ -1544,6 +1544,54 @@ def clean_model_output(text: str) -> str:
 
 
 # ============================================================
+# HONESTY GATE (abstain instead of hallucinating)
+# ============================================================
+
+_HONEST_FALLBACKS = (
+    "Hmm, sorry — I didn't quite get that, and I don't want to make things up. "
+    "Can you say a bit more about what you're after?",
+    "Honest flag: I'm not sure I understood. Give me one more detail and I'll "
+    "have another go.",
+    "I don't want to hallucinate on you — can you clarify what you're seeking?",
+    "My small brain slipped there. What exactly should I focus on?",
+)
+
+# Instruction verbs that carry no topic, so they must not count as overlap.
+_HONEST_FILLER = frozenset(
+    'expand explain summarize summary describe details detail elaborate '
+    'elaboration clarify clarification overview expert continue'.split())
+
+
+def honesty_gate(answer: str, prompt: str) -> str:
+    """Swap a zero-overlap answer for an honest clarification ask.
+
+    Conservative by design: fires ONLY when (a) brainstorm role (code lanes
+    must never be swallowed — generated code rarely repeats prompt words),
+    (b) the prompt has 2+ topic keys, (c) the answer is long enough to be a
+    real attempt (>=80 chars), and (d) not ONE key appears in the answer.
+    Confident confabulations that echo request words still pass — only a
+    bigger model fixes those. Never raises.
+    """
+    try:
+        if app_state.get("role") != "brainstorm":
+            return answer
+        keys = {w for w in re.findall(r'[a-z0-9]{5,}', (prompt or '').lower())
+                if w not in _HANDOFF_STOP and w not in _HONEST_FILLER}
+        if len(keys) < 2 or len(answer or '') < 80:
+            return answer
+        low = answer.lower()
+        for k in keys:
+            if k in low or (k.endswith('s') and len(k) > 5 and k[:-1] in low):
+                return answer
+        n = app_state.get("honesty_n", 0)
+        app_state["honesty_n"] = n + 1
+        logging.info("honesty gate fired: keys=%s", sorted(keys))
+        return _HONEST_FALLBACKS[n % len(_HONEST_FALLBACKS)]
+    except Exception:
+        return answer
+
+
+# ============================================================
 # FILE TREE
 # ============================================================
 
@@ -2752,6 +2800,10 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                     final_output = clean_model_output(
                         ''.join(stdout_buffer)
                     )
+
+                    # Honesty gate: a long answer sharing zero words with the
+                    # request is a confabulation, not an answer — ask instead.
+                    final_output = honesty_gate(final_output, prompt)
 
                     stderr_output = ''.join(
                         stderr_buffer
