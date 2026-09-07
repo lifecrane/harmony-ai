@@ -403,6 +403,114 @@ def set_aichat_model(name, config_path=None):
     return True, f"aichat model -> ollama:{clean}"
 
 
+def get_aichat_active_model(config_path=None):
+    """Top-level `model:` line from config.yaml. Never raises ('' if unread)."""
+    path = config_path or os.path.expanduser('~/.config/aichat/config.yaml')
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            for ln in f.read().splitlines():
+                m = re.match(r'^\s*model\s*:\s*(.+?)\s*$', ln)
+                if m:
+                    return m.group(1)
+    except Exception:
+        pass
+    return ''
+
+
+def set_aichat_cloud_model(provider, model_id, api_key, base_url, config_path=None):
+    """Point the aichat CLI at `provider:model_id` (openrouter only for now).
+
+    TEXT edit like set_aichat_model (no yaml round-trip — aichat 0.30 rejects
+    the boolean `wrap: false` form). Ensures a client block `name: <provider>`
+    with api_base + api_key exists, ensures the model is listed under it,
+    then sets top-level `model: <provider>:<model_id>`. Rest untouched.
+    Returns (ok, msg)."""
+    provider = (provider or 'openrouter').strip() or 'openrouter'
+    mid = (model_id or '').strip()
+    if not mid:
+        return False, 'empty cloud model id'
+    mid = re.sub(r'^\[(LCL|CLD)\]\s*', '', mid).strip()
+    path = config_path or os.path.expanduser('~/.config/aichat/config.yaml')
+    if not os.path.isfile(path):
+        return False, f"aichat config not found: {path}"
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            lines = f.read().splitlines()
+    except Exception as e:
+        return False, f"config read failed: {e}"
+
+    # 1. Ensure client block `name: <provider>` with api_base + api_key.
+    prov_idx = None
+    for i, ln in enumerate(lines):
+        if re.match(r'^\s*name\s*:\s*' + re.escape(provider) + r'\s*$', ln):
+            prov_idx = i
+            break
+    if prov_idx is None:
+        lines.append(f'  - type: openai-compatible')
+        lines.append(f'    name: {provider}')
+        lines.append(f'    api_base: {base_url}')
+        lines.append(f'    api_key: {api_key}')
+        lines.append(f'    models:')
+        lines.append(f'      - name: {mid}')
+        lines.append(f'        max_input_tokens: 8192')
+    else:
+        # Update api_base / api_key lines within this client block (up to the
+        # next `  - type:` line or EOF). Insert missing ones after name:.
+        end = len(lines)
+        for i in range(prov_idx + 1, len(lines)):
+            if re.match(r'^\s*-\s*type\s*:', lines[i]):
+                end = i
+                break
+        has_base = has_key = has_models = False
+        for i in range(prov_idx + 1, end):
+            if re.match(r'^\s*api_base\s*:', lines[i]):
+                lines[i] = f'    api_base: {base_url}'
+                has_base = True
+            elif re.match(r'^\s*api_key\s*:', lines[i]):
+                lines[i] = f'    api_key: {api_key}'
+                has_key = True
+            elif re.match(r'^\s*models\s*:\s*$', lines[i]):
+                has_models = True
+        if not has_base:
+            lines.insert(prov_idx + 1, f'    api_base: {base_url}')
+            end += 1
+        if not has_key:
+            lines.insert(prov_idx + 2, f'    api_key: {api_key}')
+            end += 1
+        if not has_models:
+            lines.insert(end, f'    models:')
+            lines.insert(end + 1, f'      - name: {mid}')
+            lines.insert(end + 2, f'        max_input_tokens: 8192')
+            end += 3
+        else:
+            if not any(re.match(r'^\s*-\s*name\s*:\s*' + re.escape(mid) + r'\s*$', ln)
+                       for ln in lines[prov_idx:end]):
+                for i in range(prov_idx + 1, end):
+                    if re.match(r'^\s*models\s*:\s*$', lines[i]):
+                        lines.insert(i + 1, f'      - name: {mid}')
+                        lines.insert(i + 2, f'        max_input_tokens: 8192')
+                        break
+
+    # 2. Top-level `model:` -> `provider:model_id` (strip any old prefix).
+    out = []
+    replaced = False
+    for ln in lines:
+        if re.match(r'^\s*model\s*:', ln):
+            out.append(f'model: {provider}:{mid}')
+            replaced = True
+        else:
+            out.append(ln)
+    if not replaced:
+        out.insert(0, f'model: {provider}:{mid}')
+
+    try:
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(out) + '\n')
+    except Exception as e:
+        return False, f"config write failed: {e}"
+    return True, f"aichat model -> {provider}:{mid}"
+
+
 PING_PROMPT = "explain in summary TBI and PTSD in context of synaptic loss"
 
 

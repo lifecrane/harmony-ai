@@ -3221,6 +3221,73 @@ def _cc_models():
             sel.on_value_change(lambda e: _render_tag_chips())
         except Exception:
             pass
+        ui.label('☁️ Cloud (openrouter only — rest untouched)').classes(
+            'text-xs text-purple-300 font-bold mt-1')
+        cloud_lbl = ui.label('').classes('text-[11px] text-purple-200 font-mono')
+        cloud_in = ui.input(
+            'Cloud model id (e.g. liquid/lfm-2.5-2.6b:free)').classes('w-full')
+        try:
+            _pref_path = os.path.join(str(BASE_DIR), 'Models', 'preferred_cloud.txt')
+            with open(_pref_path, 'r', encoding='utf-8') as _pf:
+                _pref_lines = [l.strip() for l in _pf.read().splitlines() if l.strip()]
+            if _pref_lines:
+                cloud_in.value = _pref_lines[0]
+        except Exception:
+            pass
+
+        def _cloud_status():
+            try:
+                active = _mc.get_aichat_active_model()
+            except Exception:
+                active = ''
+            cloud_lbl.text = f"active chat model: {active or '(unknown)'}"
+
+        def _use_cloud():
+            mid = (cloud_in.value or '').strip()
+            if mid.lower().startswith('openrouter:'):
+                mid = mid[len('openrouter:'):].strip()
+            if not mid:
+                ui.notify('Type a cloud model id first', type='warning')
+                return
+            if not HAS_VAULT or _vault is None:
+                ui.notify('Vault module missing', type='negative')
+                return
+            try:
+                unlocked = _vault.is_unlocked()
+            except Exception:
+                unlocked = False
+            if not unlocked:
+                ui.notify('Unlock the Vault first (Vault button)', type='warning')
+                return
+            try:
+                key = _vault.get('openrouter', 'api_key')
+            except Exception as ex:
+                ui.notify(f'Vault read failed: {ex}', type='negative')
+                return
+            if not key:
+                ui.notify('No openrouter key in Vault — add it via Vault button',
+                          type='warning')
+                return
+            ok, msg = _mc.set_aichat_cloud_model(
+                'openrouter', mid, key, 'https://openrouter.ai/api/v1')
+            safe_notify(msg, type='positive' if ok else 'negative', timeout=8000)
+            _cloud_status()
+
+        def _back_to_local():
+            name = sel.value
+            if not name or name.startswith('(none'):
+                ui.notify('Pick a local model first', type='warning')
+                return
+            if '(gguf-only)' in name:
+                ui.notify('Import the GGUF first', type='warning')
+                return
+            try:
+                ok, msg = _mc.set_aichat_model(name)
+            except Exception as ex:
+                ui.notify(f'config update failed: {ex}', type='negative')
+                return
+            safe_notify(msg, type='positive' if ok else 'warning', timeout=8000)
+            _cloud_status()
 
         def _show_progress(text=''):
             try:
@@ -3306,6 +3373,7 @@ def _cc_models():
                         break
             sel.update()
             _render_tag_chips()
+            _cloud_status()
             loaded = _mc.loaded_names()
             loaded_lbl.text = f"in RAM: {', '.join(loaded) if loaded else '(none)'}"
             ui.notify('Model list refreshed')
@@ -3505,6 +3573,9 @@ def _cc_models():
                 ui.button('Cancel', on_click=cdlg.close)
             cdlg.open()
 
+        with ui.row().classes('gap-2 flex-wrap'):
+            ui.button('Use cloud ☁️', on_click=_use_cloud).classes('bg-purple-600 text-white')
+            ui.button('Back to local', on_click=_back_to_local).classes('bg-gray-600 text-white')
         with ui.row().classes('gap-2 flex-wrap'):
             ui.button('Refresh models', on_click=_refresh).classes('bg-emerald-600 text-white')
             ui.button('Load & Launch', on_click=_load_launch).classes('bg-blue-600 text-white')
