@@ -130,7 +130,7 @@ log "Installing pip deps ..."
 "$APP_ROOT/venv_ui/bin/pip" install --upgrade $PIP_Q pip
 "$APP_ROOT/venv_ui/bin/pip" install $PIP_Q \
     'nicegui==3.14.0' 'fastapi==0.141.1' 'uvicorn==0.52.1' \
-    'requests==2.34.2' 'openviking==0.4.16' 'openviking-sdk==0.1.8'
+    'requests==2.34.2' 'huggingface_hub' 'openviking==0.4.16' 'openviking-sdk==0.1.8'
 
 # ---- 5. models (idempotent) -------------------------------------------------
 for m in qwen2.5-3b qwen3-embedding:0.6b; do
