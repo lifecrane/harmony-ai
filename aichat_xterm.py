@@ -2247,6 +2247,7 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                     'EXPLORE': 'text-sky-300',
                     'CLARIFY': 'text-amber-300',
                     'EXPLAIN': 'text-emerald-300',
+                    'EXPERT': 'text-orange-300',
                     'STRUCTURE': 'text-purple-300',
                     'SUMMARIZE': 'text-pink-300',
                 }.get(hat, 'text-gray-300')
