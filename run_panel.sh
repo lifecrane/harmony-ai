@@ -23,6 +23,17 @@ start() {
         echo "already running (pid $(cat "$PIDFILE")) — http://localhost:8080"
         return 0
     fi
+    # Viking memory needs its embedding model; without it every recall
+    # silently returns nothing (the .06 outage). Pull once if missing.
+    if command -v ollama >/dev/null 2>&1; then
+        if ! ollama list 2>/dev/null | grep -q 'qwen3-embedding'; then
+            echo "pulling qwen3-embedding:0.6b (Viking memory needs it) ..."
+            ollama pull qwen3-embedding:0.6b 2>&1 | tail -1 \
+                || echo "WARN: embedding pull failed — panel starts, recall stays empty"
+        fi
+    else
+        echo "WARN: no ollama binary — panel starts, models + recall unavailable"
+    fi
     mkdir -p History
     nohup "$PY" aichat_xterm.py > "$LOG" 2>&1 &
     echo $! > "$PIDFILE"
