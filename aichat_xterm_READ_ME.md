@@ -290,8 +290,10 @@ Keep a backup before editing; `--force` reinstall overwrites them.
 Cloud (when local is not enough): OpenRouter is an OpenAI-compatible
 gateway — browse models at `https://openrouter.ai/models`, get a key at
 `https://openrouter.ai/keys`, API base `https://openrouter.ai/api/v1`.
-NOTE: cloud selection is NOT wired in this panel (Team Check / Fastest
-Cloud are white stubs; Sys & Cld Selection lists Ollama locals only).
-Cloud search + favorites + per-role teams live in `niceai.py` and arrive
-with the merge. Keep your Vault `openrouter` entry anyway (shared
-gpg vault, costs nothing) — the merged panel will use it as-is.
+NOTE: cloud in this panel is one row in Sys & Cld Selection: provider
++ model id, key comes from the Vault (unlock with passphrase, lock after).
+Known base URLs (openrouter, deepseek) fill themselves; anything else needs
+its Base URL pasted once. Kids can add providers via Vault → Add service.
+Full cloud search + favorites + per-role teams live in `niceai.py` and arrive
+with the merge. Keep Vault entries anyway (shared gpg vault) — the merged
+panel reuses them as-is.
