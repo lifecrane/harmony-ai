@@ -1527,6 +1527,30 @@ def get_project_context(prompt: str) -> str:
 # MODEL OUTPUT CLEANUP
 # ============================================================
 
+_THINK_TAGS = ('think', 'thinking', 'thought', 'reasoning')
+
+
+def split_thinking(text: str):
+    """Split (thinking, answer). Closed <think>...</think> blocks plus a
+    trailing unclosed tag (num_predict cut) count as thinking. Never raises."""
+    thinking = []
+
+    def _take(m):
+        thinking.append(m.group(1).strip())
+        return ''
+
+    out = text or ''
+    try:
+        for tag in _THINK_TAGS:
+            out = re.sub(r'<%s>(.*?)</%s>' % (tag, tag), _take, out,
+                         flags=re.DOTALL | re.IGNORECASE)
+            out = re.sub(r'<%s>(.*)$' % tag, _take, out,
+                         flags=re.DOTALL | re.IGNORECASE)
+    except Exception:
+        return '', text
+    return '\n\n'.join(t for t in thinking if t), out
+
+
 def clean_model_output(text: str) -> str:
     text = re.sub(r'<\|[^<>]*?\|>', '', text)
     text = re.sub(r'<\|[^<>\s]*', '', text)
@@ -1535,6 +1559,12 @@ def clean_model_output(text: str) -> str:
     # Granite-style plain-text thinking (no tags): "Thinking...\n...\n...done thinking."
     text = re.sub(r'Thinking\.\.\s*.*?\.\.\.done thinking\.\s*', '', text,
                   flags=re.DOTALL | re.IGNORECASE)
+    # Unclosed think block (answer cut by num_predict before </think>):
+    # everything from the tag on is thinking, not answer.
+    text = re.sub(r'<think>.*$', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<thinking>.*$', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<thought>.*$', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<reasoning>.*$', '', text, flags=re.DOTALL | re.IGNORECASE)
     # Control-plane echo: a small model sees ROLE:/HAT: lines in its prompt and
     # imitates the machinery ("HAT: Can you delve into HART..."). These are
     # never user-facing content — drop any line starting with a control label.
@@ -2089,6 +2119,14 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                 ).classes(
                     'text-xs text-emerald-400 font-semibold ml-2'
                 )
+                think_checkbox = ui.checkbox(
+                    '🧠 thinking',
+                    value=False,
+                ).props(
+                    'dark'
+                ).classes(
+                    'text-xs text-purple-400 font-semibold ml-2'
+                ).tooltip('Show the model reasoning block above answers')
                 debug_checkbox = ui.checkbox(
                     'Debug Detail'
                 ).props(
@@ -2184,9 +2222,18 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                             )
                     else:
                         init = msg.get('label', _agent_label())
-                        md_blocks.append(
-                            f"**{init}:**\n\n{text}"
-                        )
+                        th = msg.get('thinking')
+                        if th and think_checkbox.value:
+                            md_blocks.append(
+                                f"**{init}:**\n\n"
+                                f"<span style='font-size:0.8em;color:#8b949e'>"
+                                f"<b>🧠 thinking:</b><br>{th}</span>"
+                                f"\n\n{text}"
+                            )
+                        else:
+                            md_blocks.append(
+                                f"**{init}:**\n\n{text}"
+                            )
                 if streaming_text is not None:
                     md_blocks.append(
                         f"**{_agent_label()}:**\n\n{streaming_text}"
@@ -2806,6 +2853,10 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                         ''.join(stdout_buffer)
                     )
 
+                    # Capture thinking for the optional 🧠 checkbox (default
+                    # off = the old "thoughts disconnected" behavior).
+                    think_text, _ = split_thinking(''.join(stdout_buffer))
+
                     # Honesty gate: a long answer sharing zero words with the
                     # request is a confabulation, not an answer — ask instead.
                     final_output = honesty_gate(final_output, prompt)
@@ -2887,6 +2938,7 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                         'text': result_text
                         + f'\n\n⏱ {_fmt_dur(_elapsed)}',
                         'label': _agent_label(),
+                        'thinking': think_text if think_text else '',
                     })
                     render_chat()
 
