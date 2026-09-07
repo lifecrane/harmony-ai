@@ -11,7 +11,7 @@
 #   2. Ollama (official script if missing) + enable + start
 #   3. aichat CLI 0.30.0 (musl static binary -> ~/.local/bin)
 #   4. venv_ui + pip panel deps (nicegui, fastapi/uvicorn, openviking)
-#   5. ollama pull qwen2.5-3b + qwen3-embedding:0.6b (skips what exists)
+#   5. ollama pull qwen2.5:3b + qwen3-embedding:0.6b (skips what exists)
 #   6. deploy aichat-config-template/ -> ~/.config/aichat/ (new only;
 #      use --force to overwrite a live config)
 #   7. start panel (run_panel.sh) + verify http://localhost:8080
@@ -66,7 +66,7 @@ if [ "$CHECK" = "1" ]; then
     curl -s -m 2 http://localhost:11434/api/tags >/dev/null && echo "OK ollama API" || echo "MISS ollama API"
     command -v aichat >/dev/null && echo "OK aichat: $(aichat --version 2>&1 | head -1)" || echo "MISS aichat"
     [ -f "$HOME/.config/aichat/config.yaml" ] && echo "OK aichat config" || echo "MISS aichat config"
-    ollama list 2>/dev/null | grep -q 'qwen2.5-3b' && echo "OK qwen2.5-3b" || echo "MISS qwen2.5-3b"
+    ollama list 2>/dev/null | grep -q 'qwen2.5:3b' && echo "OK qwen2.5:3b" || echo "MISS qwen2.5:3b"
     ollama list 2>/dev/null | grep -q 'qwen3-embedding' && echo "OK qwen3-embedding:0.6b" || echo "MISS qwen3-embedding:0.6b"
     curl -s -m 3 http://localhost:8080 >/dev/null && echo "OK panel :8080" || echo "MISS panel :8080"
     exit 0
@@ -146,7 +146,7 @@ log "Installing pip deps ..."
 
 # ---- 5. models (idempotent) -------------------------------------------------
 step "5/7" "models (~2.5GB first time, ollama shows % below)"
-for m in qwen2.5-3b qwen3-embedding:0.6b; do
+for m in qwen2.5:3b qwen3-embedding:0.6b; do
     if ollama list 2>/dev/null | awk '{print $1}' | grep -qx "$m\|$m:latest"; then
         log "already pulled: $m"
     else
