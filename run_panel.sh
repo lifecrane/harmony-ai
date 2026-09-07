@@ -12,6 +12,10 @@
 cd "$(dirname "$0")"
 PIDFILE="./.panel.pid"
 LOG="./History/panel.log"
+# Prefer the repo venv when present (manual runs get venv too, not system python)
+if [ -z "${PY:-}" ] && [ -x "./venv_ui/bin/python" ]; then
+    PY="./venv_ui/bin/python"
+fi
 PY="${PY:-python3}"
 
 start() {
