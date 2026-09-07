@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 import time
 from typing import Optional
-from nicegui import app, ui
+from nicegui import app, run, ui
 
 # Self-hosted draw.io editor (offline, Apache-2.0). Served locally so the flow
 # board's "edit in draw.io" never depends on the cloud editor. The assets/drawio
@@ -3280,14 +3280,20 @@ def _cc_download():
         ui.label('Results — click a repo').classes('text-xs text-gray-400 mt-1')
         res_scroll = ui.scroll_area().classes('w-full h-52 border border-gray-700 rounded')
         res_col = ui.column().classes('w-full gap-1')
+        sel_repo_lbl = ui.label('').classes('text-xs text-sky-300 font-mono')
 
         ui.label('GGUF file — click to select').classes('text-xs text-gray-400 mt-1')
         file_scroll = ui.scroll_area().classes('w-full h-40 border border-gray-700 rounded')
         file_col = ui.column().classes('w-full gap-1')
         _picked_file = {'name': ''}
+        sel_file_lbl = ui.label('').classes('text-xs text-emerald-300 font-mono')
 
-        def _search():
-            rows = _mc.search_hf_models(org_in.value.strip(), q_in.value.strip())
+        async def _search():
+            prog_lbl.text = 'searching HuggingFace...'
+            try:
+                rows = await run.io_bound(_mc.search_hf_models, org_in.value.strip(), q_in.value.strip())
+            finally:
+                prog_lbl.text = ''
             res_col.clear()
             with res_col:
                 if not rows or (len(rows) == 1 and rows[0][0].startswith(('No models', 'Search failed'))):
@@ -3299,12 +3305,17 @@ def _cc_download():
                     ).props('flat dense align=left').classes('w-full justify-start text-xs text-sky-200')
             ui.notify(f'{len(rows)} result(s)')
 
-        def _pick_repo(repo_id):
+        async def _pick_repo(repo_id):
             _repo['id'] = repo_id
-            files = _mc.list_gguf_files(repo_id)
+            sel_repo_lbl.text = f'repo: {repo_id} (loading files...)'
+            _picked_file['name'] = ''
+            sel_file_lbl.text = ''
+            try:
+                files = await run.io_bound(_mc.list_gguf_files, repo_id)
+            finally:
+                pass
             _repo['files'] = dict(files)
             file_col.clear()
-            _picked_file['name'] = ''
             with file_col:
                 if not files:
                     ui.label('No GGUF files in this repo').classes('text-gray-400 text-xs p-2')
@@ -3313,9 +3324,11 @@ def _cc_download():
                         f,
                         on_click=lambda f=f: _pick_file(f),
                     ).props('flat dense align=left').classes('w-full justify-start text-xs text-emerald-200')
+            sel_repo_lbl.text = f'repo: {repo_id} ({len(files)} file(s) — click one)'
 
         def _pick_file(name):
             _picked_file['name'] = name
+            sel_file_lbl.text = f'selected: {name}'
             ui.notify(f'Selected: {name}')
 
         def _download():
