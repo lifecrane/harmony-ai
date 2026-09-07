@@ -855,7 +855,7 @@ def _open_drawio_editor():
     with ui.dialog() as dlg:
         with ui.card().classes(
             'w-[95vw] max-w-7xl h-[88vh] '
-            'p-2 gap-2 flex flex-col'
+            'p-2 gap-2 flex flex-col dialog-drag'
         ):
 
             with ui.row().classes(
