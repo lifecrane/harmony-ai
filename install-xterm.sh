@@ -66,11 +66,19 @@ fi
 if command -v apt-get >/dev/null 2>&1; then
     log "Installing apt deps ..."
     $SUDO apt-get update -qq
-    $SUDO apt-get install -y -qq python3.11 python3.11-venv python3-pip git curl ca-certificates sudo
+    $SUDO apt-get install -y -qq python3 python3-venv python3-pip git curl ca-certificates sudo
 else
-    warn "no apt-get — install python3.11 + git + curl by hand"
+    warn "no apt-get — install python3 (>=3.11) + git + curl by hand"
 fi
-command -v python3.11 >/dev/null || die "python3.11 still missing after apt"
+# Pick python: 3.11 preferred, any >=3.11 accepted (bookworm python3 IS 3.11)
+PYBIN=""
+for c in python3.11 python3; do
+    if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+        PYBIN="$c"; break
+    fi
+done
+[ -n "$PYBIN" ] || die "no python >=3.11 found (tried python3.11, python3)"
+log "Using $PYBIN ($($PYBIN --version 2>&1))"
 
 # ---- 2. Ollama --------------------------------------------------------------
 if ! command -v ollama >/dev/null 2>&1; then
@@ -106,8 +114,8 @@ fi
 
 # ---- 4. venv + pip ----------------------------------------------------------
 if [ ! -x "$APP_ROOT/venv_ui/bin/python" ]; then
-    log "Creating venv_ui ..."
-    python3.11 -m venv "$APP_ROOT/venv_ui"
+    log "Creating venv_ui with $PYBIN ..."
+    "$PYBIN" -m venv "$APP_ROOT/venv_ui"
 fi
 log "Installing pip deps ..."
 "$APP_ROOT/venv_ui/bin/pip" install --upgrade -q pip
