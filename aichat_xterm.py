@@ -771,8 +771,25 @@ async def _generate_flow_click():
         await render_flow_board()
 
 
+# Single-instance handles: these editors build a fresh ui.dialog() per call,
+# so without this every click stacks another window. Close the previous one.
+_flow_editor_dlg = None
+_drawio_dlg = None
+
+
+def _close_prior_dlg(handle_name):
+    try:
+        h = globals().get(handle_name)
+        if h is not None:
+            h.close()
+    except Exception:
+        pass
+
+
 def _open_flow_editor():
     """✏️ Edit button: edit the project's flow.md (Mermaid) + save re-renders."""
+    global _flow_editor_dlg
+    _close_prior_dlg('_flow_editor_dlg')
     d = _project_dir_for_flow()
     flow_path = d / 'flow.md'
     try:
@@ -806,6 +823,7 @@ def _open_flow_editor():
                 'bg-emerald-600 text-white'
             )
             ui.button('Cancel', on_click=ed.close).props('flat')
+    _flow_editor_dlg = ed
     ed.open()
 
 
@@ -814,6 +832,8 @@ def _open_flow_editor():
 
 def _open_drawio_editor():
     """Open the self-hosted draw.io editor."""
+    global _drawio_dlg
+    _close_prior_dlg('_drawio_dlg')
 
     import json as _json
     import flow_graph as _fg
@@ -902,6 +922,7 @@ def _open_drawio_editor():
                 'w-full flex-1 min-h-0 overflow-hidden'
             )
 
+    _drawio_dlg = dlg
     dlg.open()
 
     # Give Vue/NiceGUI time to mount the dialog.
