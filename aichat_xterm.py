@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 import time
 from typing import Optional
-from nicegui import app, run, ui
+from nicegui import app, ui
 
 # Self-hosted draw.io editor (offline, Apache-2.0). Served locally so the flow
 # board's "edit in draw.io" never depends on the cloud editor. The assets/drawio
@@ -771,25 +771,8 @@ async def _generate_flow_click():
         await render_flow_board()
 
 
-# Single-instance handles: these editors build a fresh ui.dialog() per call,
-# so without this every click stacks another window. Close the previous one.
-_flow_editor_dlg = None
-_drawio_dlg = None
-
-
-def _close_prior_dlg(handle_name):
-    try:
-        h = globals().get(handle_name)
-        if h is not None:
-            h.close()
-    except Exception:
-        pass
-
-
 def _open_flow_editor():
     """✏️ Edit button: edit the project's flow.md (Mermaid) + save re-renders."""
-    global _flow_editor_dlg
-    _close_prior_dlg('_flow_editor_dlg')
     d = _project_dir_for_flow()
     flow_path = d / 'flow.md'
     try:
@@ -823,7 +806,6 @@ def _open_flow_editor():
                 'bg-emerald-600 text-white'
             )
             ui.button('Cancel', on_click=ed.close).props('flat')
-    _flow_editor_dlg = ed
     ed.open()
 
 
@@ -832,8 +814,6 @@ def _open_flow_editor():
 
 def _open_drawio_editor():
     """Open the self-hosted draw.io editor."""
-    global _drawio_dlg
-    _close_prior_dlg('_drawio_dlg')
 
     import json as _json
     import flow_graph as _fg
@@ -922,7 +902,6 @@ def _open_drawio_editor():
                 'w-full flex-1 min-h-0 overflow-hidden'
             )
 
-    _drawio_dlg = dlg
     dlg.open()
 
     # Give Vue/NiceGUI time to mount the dialog.
@@ -3301,20 +3280,14 @@ def _cc_download():
         ui.label('Results — click a repo').classes('text-xs text-gray-400 mt-1')
         res_scroll = ui.scroll_area().classes('w-full h-52 border border-gray-700 rounded')
         res_col = ui.column().classes('w-full gap-1')
-        sel_repo_lbl = ui.label('').classes('text-xs text-sky-300 font-mono')
 
         ui.label('GGUF file — click to select').classes('text-xs text-gray-400 mt-1')
         file_scroll = ui.scroll_area().classes('w-full h-40 border border-gray-700 rounded')
         file_col = ui.column().classes('w-full gap-1')
         _picked_file = {'name': ''}
-        sel_file_lbl = ui.label('').classes('text-xs text-emerald-300 font-mono')
 
-        async def _search():
-            prog_lbl.text = 'searching HuggingFace...'
-            try:
-                rows = await run.io_bound(_mc.search_hf_models, org_in.value.strip(), q_in.value.strip())
-            finally:
-                prog_lbl.text = ''
+        def _search():
+            rows = _mc.search_hf_models(org_in.value.strip(), q_in.value.strip())
             res_col.clear()
             with res_col:
                 if not rows or (len(rows) == 1 and rows[0][0].startswith(('No models', 'Search failed'))):
@@ -3326,17 +3299,12 @@ def _cc_download():
                     ).props('flat dense align=left').classes('w-full justify-start text-xs text-sky-200')
             ui.notify(f'{len(rows)} result(s)')
 
-        async def _pick_repo(repo_id):
+        def _pick_repo(repo_id):
             _repo['id'] = repo_id
-            sel_repo_lbl.text = f'repo: {repo_id} (loading files...)'
-            _picked_file['name'] = ''
-            sel_file_lbl.text = ''
-            try:
-                files = await run.io_bound(_mc.list_gguf_files, repo_id)
-            finally:
-                pass
+            files = _mc.list_gguf_files(repo_id)
             _repo['files'] = dict(files)
             file_col.clear()
+            _picked_file['name'] = ''
             with file_col:
                 if not files:
                     ui.label('No GGUF files in this repo').classes('text-gray-400 text-xs p-2')
@@ -3345,11 +3313,9 @@ def _cc_download():
                         f,
                         on_click=lambda f=f: _pick_file(f),
                     ).props('flat dense align=left').classes('w-full justify-start text-xs text-emerald-200')
-            sel_repo_lbl.text = f'repo: {repo_id} ({len(files)} file(s) — click one)'
 
         def _pick_file(name):
             _picked_file['name'] = name
-            sel_file_lbl.text = f'selected: {name}'
             ui.notify(f'Selected: {name}')
 
         def _download():
