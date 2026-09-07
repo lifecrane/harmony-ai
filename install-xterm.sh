@@ -26,10 +26,12 @@ AICHAT_VER="0.30.0"
 AICHAT_URL="https://github.com/sigoden/aichat/releases/download/v${AICHAT_VER}/aichat-v${AICHAT_VER}-x86_64-unknown-linux-musl.tar.gz"
 FORCE=0
 CHECK=0
+VERBOSE=0
 for a in "$@"; do
     case "$a" in
         --force) FORCE=1 ;;
         --check) CHECK=1 ;;
+        --verbose) VERBOSE=1 ;;
     esac
 done
 
@@ -46,6 +48,13 @@ elif command -v sudo >/dev/null 2>&1; then
     SUDO="sudo"
 else
     die "no sudo binary. Fix once as root: su -  ->  apt update && apt install -y sudo && usermod -aG sudo $USER  ->  log out/in, re-run"
+fi
+
+# verbosity: default quiet (-q), --verbose shows everything + traces each command
+APT_Q="-qq"; PIP_Q="-q"
+if [ "$VERBOSE" = "1" ]; then
+    APT_Q=""; PIP_Q=""
+    set -x
 fi
 
 if [ "$CHECK" = "1" ]; then
@@ -65,8 +74,8 @@ fi
 # ---- 1. apt deps ------------------------------------------------------------
 if command -v apt-get >/dev/null 2>&1; then
     log "Installing apt deps ..."
-    $SUDO apt-get update -qq
-    $SUDO apt-get install -y -qq python3 python3-venv python3-pip git curl ca-certificates sudo
+    $SUDO apt-get update $APT_Q
+    $SUDO apt-get install -y $APT_Q python3 python3-venv python3-pip git curl ca-certificates sudo
 else
     warn "no apt-get — install python3 (>=3.11) + git + curl by hand"
 fi
@@ -118,8 +127,8 @@ if [ ! -x "$APP_ROOT/venv_ui/bin/python" ]; then
     "$PYBIN" -m venv "$APP_ROOT/venv_ui"
 fi
 log "Installing pip deps ..."
-"$APP_ROOT/venv_ui/bin/pip" install --upgrade -q pip
-"$APP_ROOT/venv_ui/bin/pip" install -q \
+"$APP_ROOT/venv_ui/bin/pip" install --upgrade $PIP_Q pip
+"$APP_ROOT/venv_ui/bin/pip" install $PIP_Q \
     'nicegui==3.14.0' 'fastapi==0.141.1' 'uvicorn==0.52.1' \
     'requests==2.34.2' 'openviking==0.4.16' 'openviking-sdk==0.1.8'
 
