@@ -864,7 +864,7 @@ def _open_drawio_editor():
                 ui.label(
                     f'🖊️ draw.io — {d.name}'
                 ).classes(
-                    'text-base font-bold text-orange-400'
+                    'text-base font-bold text-orange-400 drag-handle'
                 )
 
                 ui.button(
