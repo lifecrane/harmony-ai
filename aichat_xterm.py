@@ -495,6 +495,22 @@ _ROLE_INITIAL = {
 
 _USER_COLOR = '#7dd3fc'  # user requests render in light blue
 
+def _chat_src():
+    """LCL when the active aichat model is local ollama, else CLD.
+
+    Read live from config.yaml each call (cheap text scan) so the badge and
+    chat labels follow Use cloud / Back to local with no restart.
+    Never raises."""
+    try:
+        if _mc is None:
+            return 'LCL'
+        active = _mc.get_aichat_active_model()
+    except Exception:
+        return 'LCL'
+    if not active:
+        return 'LCL'
+    return 'LCL' if active.strip().lower().startswith('ollama:') else 'CLD'
+
 # ============================================================
 # PROJECT FLOW
 # ============================================================
@@ -1182,7 +1198,7 @@ def get_lane_handoff(prompt: str) -> str:
             if prev:
                 block += f"User asked: {prev['text'][:600]}\n"
             block += f"Previous lane answered: {m['text'][:1200]}"
-            lane = {  # which lane wrote it (label like 'AI Harmony B')
+            lane = {  # which lane wrote it (label ends with the lane initial)
                 'B': 'brainstorm', 'P': 'plan', 'E': 'exec', 'QC': 'qc',
             }.get((m.get('label') or '').rsplit(' ', 1)[-1], 'previous lane')
             return f"[FROM {lane} — last on-topic exchange]:\n{block}"
@@ -2215,6 +2231,9 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
             hat_label = ui.label().classes(
                 'text-xs font-mono font-semibold ml-2'
             )
+            src_label = ui.label().classes(
+                'text-xs font-mono font-bold ml-2 text-purple-400'
+            )
             # Define helper first
             def _hat_color(hat):
                 return {
@@ -2224,10 +2243,6 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                     'STRUCTURE': 'text-purple-300',
                     'SUMMARIZE': 'text-pink-300',
                 }.get(hat, 'text-gray-300')
-
-            hat_label = ui.label().classes(
-                'text-xs font-mono font-semibold ml-2'
-            )
 
             # Then define and call the refresh function
             def _refresh_hat_label():
@@ -2240,16 +2255,15 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                     add=_hat_color(h)
                 )
 
+            def _refresh_src():
+                try:
+                    src_label.set_text(f'{_chat_src()} -')
+                except Exception:
+                    pass
+
             _refresh_hat_label()
-            def _refresh_hat_label():
-                r = app_state.get('role', 'brainstorm').upper()
-                h = app_state.get('hat', 'EXPLORE')
-                hat_label.set_text(f'· {r} / {h}')
-                hat_label.classes(
-                    remove='text-sky-300 text-amber-300 text-emerald-300 '
-                           'text-purple-300 text-pink-300 text-gray-300',
-                    add=_hat_color(h)
-                )
+            _refresh_src()
+            ui.timer(3.0, _refresh_src)
 
             # ------------------------------------------------
             # OUTPUT TERMINAL
@@ -2271,7 +2285,9 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                 role = app_state.get('role', 'brainstorm')
                 init = _ROLE_INITIAL.get(role, 'B')
                 style = _ROLE_LABEL_STYLE.get(role, _ROLE_LABEL_STYLE['exec'])
-                return f"<span style='{style}'>AI Harmony {init}</span>"
+                return (f"<span style='color:#c084fc;font-weight:bold'>"
+                        f"{_chat_src()} -</span> "
+                        f"<span style='{style}'>Harmony AI {init}</span>")
 
             def render_chat(streaming_text=None):
                 md_blocks = []
