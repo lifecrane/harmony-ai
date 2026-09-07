@@ -12,7 +12,9 @@ credentials.keeppw
 messages.md
 messages.md.bak*
 .panel.pid
-History/panel.log
+History/
+backup/
+assets/drawio/
 *.log
 .backups/
 tts/
