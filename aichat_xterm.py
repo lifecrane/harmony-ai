@@ -1554,6 +1554,11 @@ _HONEST_FALLBACKS = (
     "have another go.",
     "I don't want to hallucinate on you — can you clarify what you're seeking?",
     "My small brain slipped there. What exactly should I focus on?",
+    "Sorry, this seems outside my processing range — I wasn't engineered with "
+    "big models, I was planned for efficient use of resources instead. Can you "
+    "narrow it down for me?",
+    "That one is beyond my efficient little engine — big-model territory. "
+    "Rephrase it smaller and I'll do my best.",
 )
 
 # Instruction verbs that carry no topic, so they must not count as overlap.
