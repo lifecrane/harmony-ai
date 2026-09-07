@@ -1821,6 +1821,12 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                 'text-xl font-bold tracking-wide text-emerald-400'
             )
 
+            header_src_lbl = ui.label(
+                'LCL -'
+            ).classes(
+                'text-sm font-mono font-bold text-purple-400 ml-1'
+            )
+
             model_status_lbl = ui.label(
                 '⚙️ …'
             ).classes(
@@ -1872,6 +1878,10 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
     def _refresh_model_status():
         """Poll Ollama /api/ps and update the tiny header line. Auto-reflects
         a model loaded manually via `ollama run` — no reload needed."""
+        try:
+            header_src_lbl.set_text(f'{_chat_src()} -')
+        except Exception:
+            pass
         try:
             lm = app_state.get('loading_model')
             if lm:
@@ -2231,9 +2241,6 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
             hat_label = ui.label().classes(
                 'text-xs font-mono font-semibold ml-2'
             )
-            src_label = ui.label().classes(
-                'text-xs font-mono font-bold ml-2 text-purple-400'
-            )
             # Define helper first
             def _hat_color(hat):
                 return {
@@ -2245,25 +2252,19 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                 }.get(hat, 'text-gray-300')
 
             # Then define and call the refresh function
+            # Badge shows HAT only — role already glows on its button and
+            # rides the chat label, so the ROLE word was duplicate chrome.
             def _refresh_hat_label():
-                r = app_state.get('role', 'brainstorm').upper()
                 h = app_state.get('hat', 'EXPLORE')
-                hat_label.set_text(f'· {r} / {h}')
+                hat_label.set_text(f'· {h}')
                 hat_label.classes(
                     remove='text-sky-300 text-amber-300 text-emerald-300 '
                            'text-purple-300 text-pink-300 text-gray-300',
                     add=_hat_color(h)
                 )
 
-            def _refresh_src():
-                try:
-                    src_label.set_text(f'{_chat_src()} -')
-                except Exception:
-                    pass
-
             _refresh_hat_label()
-            _refresh_src()
-            ui.timer(3.0, _refresh_src)
+            ui.timer(3.0, _refresh_hat_label)
 
             # ------------------------------------------------
             # OUTPUT TERMINAL
