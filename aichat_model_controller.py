@@ -71,12 +71,41 @@ def normalize_model_name(filename: str, gguf_root=None) -> str:
 
 
 def _clean(name):
-    return re.sub(r'^\[(LCL|CLD)\]\s*', '', name or '').strip()
+    """Strip display chrome back to the clean ollama name.
+
+    Handles: `[LCL]/[CLD]` prefix, ` (gguf-only)` suffix, and the
+    ` · tag` usability suffixes from local_tags.py (label-only badges).
+    """
+    s = re.sub(r'^\[(LCL|CLD)\]\s*', '', name or '').strip()
+    if ' (gguf-only)' in s:
+        s = s.split(' (gguf-only)')[0].strip()
+    if ' · ' in s:
+        s = s.split(' · ')[0].strip()
+    return s
 
 
 def tag_local(name):
-    """niceai-style [LCL] prefix for dropdown display. _clean strips it back."""
+    """niceai-style [LCL] prefix + usability tags for dropdown display.
+
+    Label-only: `qwen2.5-7b...` -> `[LCL] qwen2.5-7b... · reasoning · slow`.
+    _clean strips it back, so load/unload/ping/tune paths are unaffected.
+    """
     n = (name or '').strip()
+    if ' (gguf-only)' in n:
+        base, suffix = n.split(' (gguf-only)', 1)
+        try:
+            import local_tags as _lt
+            return _lt.local_dropdown_label(base.strip()) + ' (gguf-only)'
+        except Exception:
+            pass
+        if n.startswith(('[LCL]', '[CLD]')):
+            return n
+        return f'[LCL] {n}'
+    try:
+        import local_tags as _lt
+        return _lt.local_dropdown_label(n)
+    except Exception:
+        pass
     if n.startswith(('[LCL]', '[CLD]')):
         return n
     return f'[LCL] {n}'

@@ -1602,18 +1602,41 @@ _HONEST_FALLBACKS = (
     "Honest flag: I'm not sure I understood. Give me one more detail and I'll "
     "have another go.",
     "I don't want to hallucinate on you — can you clarify what you're seeking?",
-    "My small brain slipped there. What exactly should I focus on?",
-    "Sorry, this seems outside my processing range — I wasn't engineered with "
-    "big models, I was planned for efficient use of resources instead. Can you "
-    "narrow it down for me?",
-    "That one is beyond my efficient little engine — big-model territory. "
-    "Rephrase it smaller and I'll do my best.",
+    "I'm tiny-winny, what do you think I am — Thoth or something? :) Give me "
+    "one more detail and I'll have another go.",
+    "Bro/a: small box here, I can't compete with Hermes — humans say better "
+    "shut up than say nonsense, so I keep my gates shut. :) What exactly "
+    "should I focus on?",
+    "Tiny engine, big honesty: that's outside my gates. Narrow it down for "
+    "me? :)",
+    "My gates say no — I'd rather shut up than invent stuff. One more hint? :)",
+    "No webcrawler in me yet — them guys in the kitchen-lab 🙄 couldn't fit "
+    "all that detail in a tiny chip. Sorry ab that, upgrade soon. What part "
+    "matters most?",
+    "Kitchen-lab strikes again 🙄 — big web, tiny chip, no crawler yet. I'll "
+    "be upgraded soon, promise. Narrow it down for me?",
 )
 
 # Instruction verbs that carry no topic, so they must not count as overlap.
 _HONEST_FILLER = frozenset(
     'expand explain summarize summary describe details detail elaborate '
     'elaboration clarify clarification overview expert continue'.split())
+
+# Paraphrase map: a good answer says "money/Morgan" for "funding" and
+# "issues" for "problems". Without this the gate eats correct answers that
+# don't echo the prompt's exact nouns (the Wardenclyffe funding false-fire).
+_HONEST_SYNONYMS = {
+    'funding': {'fund', 'funds', 'financial', 'finance', 'money', 'investor',
+                'morgan', 'backing', 'budget', 'costs'},
+    'problems': {'problem', 'issues', 'issue', 'difficult', 'trouble',
+                 'struggle', 'failed', 'failure'},
+    'problem': {'problems', 'issues', 'issue', 'difficult', 'trouble'},
+    'money': {'funding', 'funds', 'financial', 'morgan', 'investor', 'costs'},
+    'tower': {'wardenclyffe', 'warden', 'antenna', 'transmitter'},
+    'tesla': {'nikola', 'wardenclyffe', 'inventor'},
+    'history': {'historical', 'past', 'century', 'origin'},
+    'details': {'detail', 'specifics', 'facts', 'information'},
+}
 
 
 def honesty_gate(answer: str, prompt: str) -> str:
@@ -1637,9 +1660,13 @@ def honesty_gate(answer: str, prompt: str) -> str:
         for k in keys:
             if k in low or (k.endswith('s') and len(k) > 5 and k[:-1] in low):
                 return answer
+            for _syn in _HONEST_SYNONYMS.get(k, ()):
+                if _syn in low:
+                    return answer
         n = app_state.get("honesty_n", 0)
         app_state["honesty_n"] = n + 1
-        logging.info("honesty gate fired: keys=%s", sorted(keys))
+        logging.info("honesty gate fired: keys=%s prompt=%.80s discarded=%.300s",
+                     sorted(keys), prompt, answer)
         return _HONEST_FALLBACKS[n % len(_HONEST_FALLBACKS)]
     except Exception:
         return answer
@@ -3189,6 +3216,11 @@ def _cc_models():
         prog_bar = ui.linear_progress(show_value=False).classes('w-full')
         prog_bar.visible = False
         sel = ui.select([], label='Ollama model').classes('w-full')
+        tag_row = ui.row().classes('gap-1 flex-wrap')
+        try:
+            sel.on_value_change(lambda e: _render_tag_chips())
+        except Exception:
+            pass
 
         def _show_progress(text=''):
             try:
@@ -3211,7 +3243,42 @@ def _cc_models():
 
         gguf_paths = {}
 
+        def _render_tag_chips():
+            # Usability tags for the selected model (label-only badges from
+            # local_tags.py — same pattern as niceai.py cloud ⭐/· free badges).
+            # Toggles persist to Models/local_tags.json, merge-clean to niceai.
+            tag_row.clear()
+            try:
+                import local_tags as _lt
+            except Exception:
+                return
+            cur = sel.value
+            if not cur or cur.startswith('(none'):
+                return
+            clean = _mc._clean(cur) if hasattr(_mc, '_clean') else cur
+            if '(gguf-only)' in (cur or ''):
+                return
+            cur_tags = _lt.get_tags(clean)
+            with tag_row:
+                ui.label('tags:').classes('text-[10px] text-gray-500 self-center')
+                for _t in _lt.ALLOWED_TAGS:
+                    _on = _t in cur_tags
+                    ui.button(
+                        f"✓ {_t}" if _on else _t,
+                        on_click=lambda t=_t: (_lt.toggle_tag(clean, t), _refresh()),
+                    ).props(('unelevated dense size=xs color=positive' if _on
+                              else 'outline dense size=xs color=grey')
+                    ).classes('text-[10px]').tooltip(
+                        f"{'Remove' if _on else 'Add'} '{_t}' tag")
+
         def _refresh():
+            def _sort_opt(lbl):
+                # default/keeper first, drop last — via local_tags, fallback alpha.
+                try:
+                    import local_tags as _lt
+                    return _lt.sort_key_for_label(lbl)
+                except Exception:
+                    return (1, (lbl or '').lower())
             models = _mc.ollama_models()
             tags = [m['name'] for m in models]
             g = _mc.scan_gguf_folder(str(BASE_DIR))
@@ -3219,15 +3286,26 @@ def _cc_models():
             for n, p in g.items():
                 if not _mc.gguf_is_imported(n, models):
                     gguf_paths[n] = p
-            opts = sorted(_mc.tag_local(t) for t in tags)
-            opts += sorted(_mc.tag_local(f'{n} (gguf-only)') for n in gguf_paths)
-            # Preserve the selection across refreshes (set_options clears it,
-            # stranding Unload/Ping/Tune on "Pick a model first").
-            _keep = sel.value if sel.value in opts else None
+            opts = sorted((_mc.tag_local(t) for t in tags), key=_sort_opt)
+            opts += sorted((_mc.tag_local(f'{n} (gguf-only)') for n in gguf_paths),
+                           key=_sort_opt)
+            # Preserve the selection across refreshes by CLEAN name (labels
+            # now carry ` · tag` suffixes, so raw-value compare would strand
+            # Unload/Ping/Tune on "Pick a model first").
+            def _key(v):
+                try:
+                    return _mc._clean(v) if hasattr(_mc, '_clean') else (v or '')
+                except Exception:
+                    return v or ''
+            _keep_clean = _key(sel.value) if sel.value else None
             sel.set_options(opts or ['(none — is Ollama running?)'])
-            if _keep:
-                sel.value = _keep
+            if _keep_clean:
+                for _o in opts:
+                    if _key(_o) == _keep_clean:
+                        sel.value = _o
+                        break
             sel.update()
+            _render_tag_chips()
             loaded = _mc.loaded_names()
             loaded_lbl.text = f"in RAM: {', '.join(loaded) if loaded else '(none)'}"
             ui.notify('Model list refreshed')
@@ -3235,7 +3313,11 @@ def _cc_models():
         def _gguf_key_from_value(v):
             if not v or '(gguf-only)' not in v:
                 return None
-            return v.replace('[LCL] ', '').replace(' (gguf-only)', '').strip()
+            try:
+                base = _mc._clean(v) if hasattr(_mc, '_clean') else v
+            except Exception:
+                base = v
+            return base.replace('[LCL] ', '').replace(' (gguf-only)', '').strip()
 
         def _prompt_import(gguf_path):
             stem = Path(gguf_path).stem
