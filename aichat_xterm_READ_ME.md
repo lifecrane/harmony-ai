@@ -309,3 +309,17 @@ i5 quad-core with OK results:
 - `lfm2-1.2b-rag:latest` (730MB) — fast default, instant chat
 - `granite-4-2-3b-q5-k-m:latest` (2.6GB) — slow reasoning keeper
 - `qwen2.5-7b-q4_k_m:latest` (4.7GB) — quality keeper, no ramble, ~30-50s/turn
+
+## 13. Flow board, draw.io editor, md editor
+
+- **Flow board (mermaid, instant view):** `/flow` or the Flow button renders the
+  active project's `flow.md` inline via `assets/mermaid.min.js` (3.5MB, local).
+  Read-only, millisecond render. Source of truth is `flow_graph.py`.
+- **draw.io editor (on demand):** the 🖊️ button opens the full diagram editor
+  in an iframe (`assets/drawio/`, served at `/drawio`), converts
+  `flow_graph.json` to mxGraph XML for editing, saves back json + md. Slow to
+  boot (seconds), real drag-and-drop. `↗` button opens it in a full tab if the
+  dialog ever clips the canvas.
+- **md editor (built in):** file-tree md files and the flow editor open
+  resizable dialogs whose textareas fill the window down to Save/Cancel (✕
+  closes). No external editor needed on the box.
