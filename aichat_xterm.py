@@ -1154,11 +1154,11 @@ _HANDOFF_STOP = frozenset(
     'them then than that this these those with from into over under again '
     'very just about also please thank thanks hello'.split())
 
-_HANDOFF_LANES = ('plan', 'exec', 'qc')
+_HANDOFF_LANES = ('plan', 'exec', 'qc', 'brainstorm')
 
 
 def get_lane_handoff(prompt: str) -> str:
-    """Previous-lane context for plan/exec/qc: last chat exchange sharing a
+    """Previous-lane context for plan/exec/qc/brainstorm: last chat exchange sharing a
     topic keyword with the new prompt. Empty when nothing relevant (the lane's
     clarification rule then covers the ambiguity). Never raises."""
     try:
@@ -1217,36 +1217,21 @@ def _is_trivial(prompt: str) -> bool:
 
 
 def build_model_prompt(prompt: str) -> str:
-    """Combine root index (always) + project structure + task status +
-    selective memory with the request."""
+    """Combine orientation + project structure + task status + handoff +
+    selective memory with the request. Pure general-knowledge questions go
+    out bare (role/hat + topic pin only) via the gate below."""
     parts = []
 
     # If we ran an instant terminal command, feed its output to the model first.
     # Capped — a `!cat hugefile` would otherwise blow past a small model's
     # context window ("Exceed max_input_tokens limit").
-    if app_state.get("last_context"):
+    has_terminal = bool(app_state.get("last_context"))
+    if has_terminal:
         _lc = str(app_state["last_context"])[:3000]
         parts.append(f"[RECENT TERMINAL OUTPUT]:\n{_lc}\n")
         app_state["last_context"] = None  # Clear it after using once
 
     trivial = _is_trivial(prompt)
-
-    # ALWAYS-ON orientation: cheap (~8 lines) so the model never gets lost,
-    # no matter how the question is phrased. This is what fixes "do you know
-    # where the project folders are?" — that phrasing misses every trigger
-    # list, so the gated project block below is empty, but the root index
-    # is still there. SKIPPED for greetings — a 1.2B model echoes the folder
-    # dump back instead of answering "hello".
-    root_index = "" if trivial else build_root_index(str(BASE_DIR))
-    if root_index:
-        parts.append(root_index)
-
-    # Current folder (the tree click sets this). Always on so "at this
-    # level" / "here" questions answer from where the user IS, instead of
-    # defaulting to [PROJECTS] every time. Also skipped for greetings.
-    here_index = "" if trivial else build_here_index(app_state.get("workdir"))
-    if here_index:
-        parts.append(here_index)
 
     project_context = "" if trivial else get_project_context(prompt)
     if project_context:
@@ -1261,9 +1246,43 @@ def build_model_prompt(prompt: str) -> str:
     if context:
         parts.append(context)
 
+    # GENERAL-KNOWLEDGE GATE (selection lens): no lens caught anything, so the
+    # request is about the world, not the workspace. Skip the ALWAYS-ON
+    # orientation below — ~700 chars of folder/project framing is what tips a
+    # 3B model into answering about the codebase instead of the question.
+    # Orientation questions keep working: they carry listing/deixis words, so
+    # _references_project() catches them and this gate never fires for them.
+    general = (not trivial and not has_terminal
+               and not project_context and not handoff and not context)
+
+    # ALWAYS-ON orientation: cheap (~8 lines) so the model never gets lost,
+    # no matter how the question is phrased. This is what fixes "do you know
+    # where the project folders are?" — that phrasing misses every trigger
+    # list, so the gated project block below is empty, but the root index
+    # is still there. SKIPPED for greetings — a 1.2B model echoes the folder
+    # dump back instead of answering "hello". ALSO skipped in
+    # general-knowledge mode (gate above).
+    root_index = "" if (trivial or general) else build_root_index(str(BASE_DIR))
+    if root_index:
+        parts.append(root_index)
+
+    # Current folder (the tree click sets this). Always on so "at this
+    # level" / "here" questions answer from where the user IS, instead of
+    # defaulting to [PROJECTS] every time. Also skipped for greetings and
+    # general-knowledge questions.
+    here_index = "" if (trivial or general) else build_here_index(app_state.get("workdir"))
+    if here_index:
+        parts.append(here_index)
+
     state = "" if trivial else _state_line(prompt)
     if state:
-        parts.append(state)
+        if general:
+            parts.append(
+                state + "\n(TOPIC PIN: answer ONLY the CURRENT REQUEST below; "
+                "any block above is orientation, not the topic. "
+                "Do not change topic.)")
+        else:
+            parts.append(state)
 
     logging.info(
         "prompt ctx chars: root=%d here=%d proj=%d viking=%d state=%d req=%d",
