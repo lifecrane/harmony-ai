@@ -1,0 +1,20 @@
+# never ship env, secrets, logs, models, caches
+venv_ui/
+__pycache__/
+*.pyc
+Models/
+blobs/
+*.gguf
+*.bin
+credentials.enc
+credentials.keeppw
+*.enc
+messages.md
+messages.md.bak*
+.panel.pid
+History/panel.log
+*.log
+.backups/
+tts/
+node_modules/
+.DS_Store

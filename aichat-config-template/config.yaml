@@ -1,0 +1,26 @@
+model: ollama:qwen2.5-3b
+temperature: null
+top_p: null
+
+stream: true
+save: true
+wrap: no
+wrap_code: false
+
+function_calling: false
+highlight: true
+light_theme: false
+
+save_session: null
+compress_threshold: 4000
+
+serve_addr: 127.0.0.1:8010
+
+clients:
+  - type: openai-compatible
+    name: ollama
+    api_base: http://localhost:11434/v1
+    api_key: ollama
+    models:
+      - name: qwen2.5-3b
+        max_input_tokens: 8192

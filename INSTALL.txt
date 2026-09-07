@@ -1,0 +1,14 @@
+HARMONY PANEL — fresh-box install (Debian headless assumed)
+=====================================================
+1. Prereqs: python3.11, Ollama running, `aichat` CLI binary 0.30.0
+   (https://github.com/sigoden/aichat -> ~/.local/bin/aichat).
+   pip: nicegui requests fastapi uvicorn openviking openviking-sdk
+   (use a venv: python3.11 -m venv venv_ui && venv_ui/bin/pip install ...).
+2. Copy template config: cp -r aichat-config-template/* ~/.config/aichat/
+   Edit ~/.config/aichat/config.yaml `model:` to a tag from `ollama list`.
+   Required pulls: ollama pull qwen2.5-3b ; ollama pull qwen3-embedding:0.6b
+3. Run: ./run_panel.sh start  (panel on http://localhost:8080)
+4. First boot creates empty History/, backup/, messages.md, vault.
+   Vault/credentials NEVER ship — create fresh in the panel.
+Layout: panel .py at root (BASE_DIR portable), template config under
+aichat-config-template/, demo docs under WORKSPACE/mydocs/.
