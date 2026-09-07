@@ -1,0 +1,31 @@
+# RELAY COMMANDS — laptop terminal (joao-Latitude-5400)
+# Copy files server (192.168.0.6) -> laptop -> guest (192.168.122.166).
+# Brace expansions below have NO spaces after commas.
+
+# --- whole folder, first time only (already done) ---
+# scp -r joao@192.168.0.6:/home/joao/STORAGE/harmony-xterm-aichat ~/
+# scp -r ~/harmony-xterm-aichat joao@192.168.122.166:~/
+
+# --- update single files (normal case) ---
+scp joao@192.168.0.6:/home/joao/STORAGE/harmony-xterm-aichat/aichat_xterm.py ~/harmony-xterm-aichat/
+scp ~/harmony-xterm-aichat/aichat_xterm.py joao@192.168.122.166:~/harmony-xterm-aichat/
+
+# --- update the 3 helper modules ---
+scp joao@192.168.0.6:/home/joao/STORAGE/harmony-xterm-aichat/{aichat_docs.py,flow_graph.py,flow_drawio.py} ~/harmony-xterm-aichat/
+scp ~/harmony-xterm-aichat/{aichat_docs.py,flow_graph.py,flow_drawio.py} joao@192.168.122.166:~/harmony-xterm-aichat/
+
+# --- update assets (mermaid/logo) ---
+scp -r joao@192.168.0.6:/home/joao/STORAGE/harmony-xterm-aichat/assets ~/harmony-xterm-aichat/
+scp -r ~/harmony-xterm-aichat/assets joao@192.168.122.166:~/harmony-xterm-aichat/
+
+# --- update installer ---
+scp joao@192.168.0.6:/home/joao/STORAGE/harmony-xterm-aichat/install-xterm.sh ~/harmony-xterm-aichat/
+scp ~/harmony-xterm-aichat/install-xterm.sh joao@192.168.122.166:~/harmony-xterm-aichat/
+
+# ================= GUEST TERMINAL (192.168.122.166) =================
+# cd ~/harmony-xterm-aichat && ./run_panel.sh restart
+# sleep 3
+# tail -15 History/panel.log
+# check: bash install-xterm.sh --check
+# install: bash install-xterm.sh --verbose
+# browser (on laptop): http://192.168.122.166:8080
