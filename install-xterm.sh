@@ -75,7 +75,14 @@ fi
 if command -v apt-get >/dev/null 2>&1; then
     log "Installing apt deps ..."
     $SUDO apt-get update $APT_Q
-    $SUDO apt-get install -y $APT_Q python3 python3-venv python3-pip git curl ca-certificates sudo
+    $SUDO apt-get install -y $APT_Q python3 python3-venv python3-pip git curl ca-certificates sudo software-properties-common
+    # Ubuntu 22.04 ships python 3.10 only — fetch 3.11 from deadsnakes
+    if ! command -v python3.11 >/dev/null 2>&1; then
+        log "python3.11 missing — trying deadsnakes PPA ..."
+        $SUDO add-apt-repository -y ppa:deadsnakes/ppa
+        $SUDO apt-get update $APT_Q
+        $SUDO apt-get install -y $APT_Q python3.11 python3.11-venv || warn "python3.11 install failed"
+    fi
 else
     warn "no apt-get — install python3 (>=3.11) + git + curl by hand"
 fi
