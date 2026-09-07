@@ -151,7 +151,7 @@ if ollama list 2>/dev/null | awk '{print $1}' | grep -qx "$CHAT_MODEL\|$CHAT_MOD
 else
     ans=""
     if [ -t 0 ]; then
-        printf 'Do you want to pull the default model %s now, or download one manually yourself to Models/<modelname>? If you download manually, Harmony AI auto-imports to Ollama on one selection in control center refresh, creating the Modelfile including template + caps. :) [Y/n]: ' "$CHAT_MODEL"
+        printf 'Pull the default model %s now? [Y/n] (n skips — drop your own GGUF into Models/<modelname>/ and Harmony AI auto-imports it to Ollama on one selection in control center refresh, creating the Modelfile with template + caps :) ): ' "$CHAT_MODEL"
         read -r ans || ans=""
     fi
     case "$ans" in
