@@ -1535,6 +1535,11 @@ def clean_model_output(text: str) -> str:
     # Granite-style plain-text thinking (no tags): "Thinking...\n...\n...done thinking."
     text = re.sub(r'Thinking\.\.\s*.*?\.\.\.done thinking\.\s*', '', text,
                   flags=re.DOTALL | re.IGNORECASE)
+    # Control-plane echo: a small model sees ROLE:/HAT: lines in its prompt and
+    # imitates the machinery ("HAT: Can you delve into HART..."). These are
+    # never user-facing content — drop any line starting with a control label.
+    text = re.sub(r'(?im)^\s*(ROLE|HAT|MODE|LENGTH|DEPTH|TOPIC PIN|CURRENT REQUEST)\s*:.{0,400}$', '', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
 
