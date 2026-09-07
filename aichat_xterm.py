@@ -1323,12 +1323,13 @@ def build_model_prompt(prompt: str) -> str:
 # A small finite vocabulary so a small model isn't inferring from a huge
 # rulebook. The app detects intent and redeclares the hat each turn.
 _HAT_KEYWORDS = {
-    'expert': ('expert', 'subject matter expert', 'full detail', 'exhaustive',
-               'deep dive', 'dive deep', 'tell me everything',
-               'everything you know', 'maximum detail',
-               'as detailed as possible', 'expand more', 'go deeper',
-               'tell me more', 'elaborate', 'in depth', 'in-depth',
-               'every step', 'top to bottom', 'sme'),
+    # EXPERT fires ONLY on explicit expert-family phrasing. It used to also
+    # claim 'expand more/go deeper/tell me more/elaborate/in depth', which
+    # stole every EXPLAIN follow-up (dict order checks expert first) and left
+    # the badge stuck on EXPERT. Those belong to EXPLAIN per the README.
+    'expert': ('expert', 'subject matter expert', 'sme', 'deep dive',
+               'dive deep', 'tell me everything', 'everything you know',
+               'maximum detail', 'as detailed as possible', 'top to bottom'),
     'explain': ('explain', 'give me more detail', 'more detail', 'articulate',
                 'walk me through', 'break down', 'unpack', 'expand'),
     'clarify': ('what do you mean', 'clarify', 'i am confused', 'i don\'t get',
