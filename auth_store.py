@@ -69,11 +69,9 @@ def _auto_unlock_from_keep():
     global _data, _passphrase, _last_access
     try:
         if not os.path.exists(_KEEP_PATH):
-            print(f"[VAULT-AUTOUNLOCK] keeppw file NOT found at {_KEEP_PATH}", flush=True)
-            return False
+            return False  # fresh box, no remembered passphrase — vault starts locked
         if not vault_exists():
-            print(f"[VAULT-AUTOUNLOCK] vault file NOT found at {VAULT_PATH}", flush=True)
-            return False
+            return False  # no vault yet — user creates one in the panel
         with open(_KEEP_PATH, "r", encoding="utf-8") as f:
             pw = f.read().strip()
         if not pw:

@@ -10,11 +10,14 @@ from typing import Optional
 from nicegui import app, ui
 
 # Self-hosted draw.io editor (offline, Apache-2.0). Served locally so the flow
-# board's "edit in draw.io" never depends on the cloud editor.
-try:
-    app.add_static_files('/drawio', str(Path(__file__).resolve().parent / 'assets' / 'drawio'))
-except Exception as _e:
-    logging.warning('drawio static mount failed: %s', _e)
+# board's "edit in draw.io" never depends on the cloud editor. The assets/drawio
+# folder (150MB) ships separately — skip silently when absent, mount when present.
+_drawio_dir = Path(__file__).resolve().parent / 'assets' / 'drawio'
+if _drawio_dir.is_dir():
+    try:
+        app.add_static_files('/drawio', str(_drawio_dir))
+    except Exception as _e:
+        logging.warning('drawio static mount failed: %s', _e)
 
 # Global draw.io <-> parent postMessage bridge. Registered ONCE at page load (not
 # per-dialog) so it is always in place before the iframe posts its `init` event.
