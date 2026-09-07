@@ -3221,9 +3221,13 @@ def _cc_models():
             sel.on_value_change(lambda e: _render_tag_chips())
         except Exception:
             pass
-        ui.label('☁️ Cloud (openrouter only — rest untouched)').classes(
+        ui.label('☁️ Cloud (vault key + lock — rest untouched)').classes(
             'text-xs text-purple-300 font-bold mt-1')
         cloud_lbl = ui.label('').classes('text-[11px] text-purple-200 font-mono')
+        with ui.row().classes('gap-2 w-full'):
+            prov_in = ui.input('Provider', value='openrouter').classes('flex-1')
+            url_in = ui.input('Base URL (blank = known default)',
+                              placeholder='https://openrouter.ai/api/v1').classes('flex-2')
         cloud_in = ui.input(
             'Cloud model id (e.g. liquid/lfm-2.5-2.6b:free)').classes('w-full')
         try:
@@ -3235,6 +3239,13 @@ def _cc_models():
         except Exception:
             pass
 
+        # Known OpenAI-compatible endpoints — blank URL resolves from here so
+        # kids only type provider + model. Anything else: paste its base URL.
+        _KNOWN_CLOUD_BASE = {
+            'openrouter': 'https://openrouter.ai/api/v1',
+            'deepseek': 'https://api.deepseek.com/v1',
+        }
+
         def _cloud_status():
             try:
                 active = _mc.get_aichat_active_model()
@@ -3243,11 +3254,17 @@ def _cc_models():
             cloud_lbl.text = f"active chat model: {active or '(unknown)'}"
 
         def _use_cloud():
+            prov = (prov_in.value or '').strip().lower() or 'openrouter'
             mid = (cloud_in.value or '').strip()
-            if mid.lower().startswith('openrouter:'):
-                mid = mid[len('openrouter:'):].strip()
+            if mid.lower().startswith(prov + ':'):
+                mid = mid[len(prov) + 1:].strip()
             if not mid:
                 ui.notify('Type a cloud model id first', type='warning')
+                return
+            base = (url_in.value or '').strip() or _KNOWN_CLOUD_BASE.get(prov, '')
+            if not base:
+                ui.notify(f'Unknown provider — paste its Base URL too',
+                          type='warning')
                 return
             if not HAS_VAULT or _vault is None:
                 ui.notify('Vault module missing', type='negative')
@@ -3257,19 +3274,20 @@ def _cc_models():
             except Exception:
                 unlocked = False
             if not unlocked:
-                ui.notify('Unlock the Vault first (Vault button)', type='warning')
+                ui.notify('Unlock the Vault first (Vault button: passphrase)',
+                          type='warning')
                 return
             try:
-                key = _vault.get('openrouter', 'api_key')
+                key = _vault.get(prov, 'api_key')
             except Exception as ex:
                 ui.notify(f'Vault read failed: {ex}', type='negative')
                 return
             if not key:
-                ui.notify('No openrouter key in Vault — add it via Vault button',
+                ui.notify(f'No key for {prov} in Vault — Vault button → '
+                          f'Add service → lock it again after',
                           type='warning')
                 return
-            ok, msg = _mc.set_aichat_cloud_model(
-                'openrouter', mid, key, 'https://openrouter.ai/api/v1')
+            ok, msg = _mc.set_aichat_cloud_model(prov, mid, key, base)
             safe_notify(msg, type='positive' if ok else 'negative', timeout=8000)
             _cloud_status()
 
