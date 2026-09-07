@@ -39,6 +39,15 @@ die()  { printf '[install-xterm][ERROR] %s\n' "$*" >&2; exit 1; }
 
 [ -f "$APP_ROOT/aichat_xterm.py" ] || die "run from the repo folder ($APP_ROOT/aichat_xterm.py missing)"
 
+# sudo handling: root needs none; normal user needs the sudo binary
+if [ "$(id -u)" = "0" ]; then
+    SUDO=""
+elif command -v sudo >/dev/null 2>&1; then
+    SUDO="sudo"
+else
+    die "no sudo binary. Fix once as root: su -  ->  apt update && apt install -y sudo && usermod -aG sudo $USER  ->  log out/in, re-run"
+fi
+
 if [ "$CHECK" = "1" ]; then
     echo "=== CHECK (no changes) ==="
     command -v python3.11 >/dev/null && echo "OK python3.11: $(python3.11 --version)" || echo "MISS python3.11"
@@ -55,9 +64,9 @@ fi
 
 # ---- 1. apt deps ------------------------------------------------------------
 if command -v apt-get >/dev/null 2>&1; then
-    log "Installing apt deps (sudo) ..."
-    sudo apt-get update -qq
-    sudo apt-get install -y -qq python3.11 python3.11-venv python3-pip git curl ca-certificates
+    log "Installing apt deps ..."
+    $SUDO apt-get update -qq
+    $SUDO apt-get install -y -qq python3.11 python3.11-venv python3-pip git curl ca-certificates sudo
 else
     warn "no apt-get — install python3.11 + git + curl by hand"
 fi
@@ -69,7 +78,7 @@ if ! command -v ollama >/dev/null 2>&1; then
     curl -fsSL https://ollama.com/install.sh | sh
 fi
 if systemctl list-unit-files 2>/dev/null | grep -q '^ollama.service'; then
-    sudo systemctl enable --now ollama 2>/dev/null || systemctl --user start ollama 2>/dev/null || true
+    $SUDO systemctl enable --now ollama 2>/dev/null || systemctl --user start ollama 2>/dev/null || true
 else
     (ollama serve >/tmp/ollama.log 2>&1 &) || true
 fi
