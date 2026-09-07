@@ -11,7 +11,7 @@
 #   2. Ollama (official script if missing) + enable + start
 #   3. aichat CLI 0.30.0 (musl static binary -> ~/.local/bin)
 #   4. venv_ui + pip panel deps (nicegui, fastapi/uvicorn, openviking)
-#   5. ollama pull qwen2.5:3b (single small LLM, skips if present)
+#   5. one small default LLM (your choice) + 4 tested i5 quad-core favs list
 #   6. deploy aichat-config-template/ -> ~/.config/aichat/ (new only;
 #      use --force to overwrite a live config)
 #   7. start panel (run_panel.sh) + verify http://localhost:8080
@@ -151,7 +151,7 @@ if ollama list 2>/dev/null | awk '{print $1}' | grep -qx "$CHAT_MODEL\|$CHAT_MOD
 else
     ans=""
     if [ -t 0 ]; then
-        printf 'Pull the default model %s now? [Y/n] (n skips — drop your own GGUF into Models/<modelname>/ and Harmony AI auto-imports it to Ollama on one selection in control center refresh, creating the Modelfile with template + caps :) ): ' "$CHAT_MODEL"
+        printf 'Pull the default small model %s now? [Y/n] (n skips — drop your own GGUF into Models/<modelname>/ and Harmony AI auto-imports it to Ollama on one selection in control center refresh, creating the Modelfile with template + caps :) ): ' "$CHAT_MODEL"
         read -r ans || ans=""
     fi
     case "$ans" in
@@ -160,6 +160,14 @@ else
            ollama pull "$CHAT_MODEL" || warn "pull failed for $CHAT_MODEL (retry: ollama pull $CHAT_MODEL)" ;;
     esac
 fi
+cat <<'EOF'
+[install-xterm] Tested on i5 quad-core (4 threads, CPU-only) — excellent starting 4:
+  1. lfm2-1.2b-rag:latest (730MB) — fast chat, daily default
+  2. granite-4-2-3b-q5-k-m:latest (2.6GB) — slow reasoning keeper
+  3. olmoe-1b-7b-0924-instruct-q4-k-m:latest (4.2GB) — reasoning + chat MoE
+  4. qwen2.5-7b-q4_k_m:latest (4.7GB) — quality keeper, slow but no ramble
+  Add any via Models/<modelname>/ GGUF + one control-center refresh (auto-imports).
+EOF
 
 # ---- 6. aichat config (new only, unless --force) ----------------------------
 step "6/7" "aichat config"
