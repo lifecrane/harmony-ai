@@ -297,3 +297,15 @@ its Base URL pasted once. Kids can add providers via Vault → Add service.
 Full cloud search + favorites + per-role teams live in `niceai.py` and arrive
 with the merge. Keep Vault entries anyway (shared gpg vault) — the merged
 panel reuses them as-is.
+
+## 12. Scope: brainstorm works here, the full chain does not
+
+The plan → exec → qc pipeline is NOT connected in this panel — role buttons
+switch prompts only, no coder/QA chain runs behind them. That chain lives in
+`niceai.py` and arrives with the merge. What works here is brainstorm-level
+chat, and it holds up even on small local models. Tested tonight on
+i5 quad-core with OK results:
+
+- `lfm2-1.2b-rag:latest` (730MB) — fast default, instant chat
+- `granite-4-2-3b-q5-k-m:latest` (2.6GB) — slow reasoning keeper
+- `qwen2.5-7b-q4_k_m:latest` (4.7GB) — quality keeper, no ramble, ~30-50s/turn
