@@ -1248,6 +1248,11 @@ def build_model_prompt(prompt: str) -> str:
         app_state["last_context"] = None  # Clear it after using once
 
     trivial = _is_trivial(prompt)
+    if trivial:
+        # Greetings skip all context lenses, but the hat badge must still
+        # follow the turn — otherwise it sticks on the previous hat (e.g.
+        # a restored EXPERT) while the answer already went out as EXPLORE.
+        app_state["hat"] = detect_hat(prompt)
 
     project_context = "" if trivial else get_project_context(prompt)
     if project_context:
