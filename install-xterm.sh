@@ -38,6 +38,7 @@ done
 log()  { printf '[install-xterm] %s\n' "$*"; }
 warn() { printf '[install-xterm][WARN] %s\n' "$*" >&2; }
 die()  { printf '[install-xterm][ERROR] %s\n' "$*" >&2; exit 1; }
+step() { printf '\n===== [%s] %s =====\n' "$1" "$2"; }
 
 [ -f "$APP_ROOT/aichat_xterm.py" ] || die "run from the repo folder ($APP_ROOT/aichat_xterm.py missing)"
 
@@ -72,6 +73,7 @@ if [ "$CHECK" = "1" ]; then
 fi
 
 # ---- 1. apt deps ------------------------------------------------------------
+step "1/7" "system packages (may ask sudo once, ~1 min)"
 if command -v apt-get >/dev/null 2>&1; then
     log "Installing apt deps ..."
     $SUDO apt-get update $APT_Q
@@ -97,6 +99,7 @@ done
 log "Using $PYBIN ($($PYBIN --version 2>&1))"
 
 # ---- 2. Ollama --------------------------------------------------------------
+step "2/7" "Ollama service"
 if ! command -v ollama >/dev/null 2>&1; then
     log "Installing Ollama ..."
     curl -fsSL https://ollama.com/install.sh | sh
@@ -113,6 +116,7 @@ done
 curl -s -m 2 http://localhost:11434/api/tags >/dev/null || die "Ollama API not responding on :11434"
 
 # ---- 3. aichat CLI ----------------------------------------------------------
+step "3/7" "aichat CLI $AICHAT_VER"
 if command -v aichat >/dev/null 2>&1 && aichat --version 2>&1 | grep -q "$AICHAT_VER"; then
     log "aichat $AICHAT_VER already installed"
 else
@@ -129,6 +133,7 @@ else
 fi
 
 # ---- 4. venv + pip ----------------------------------------------------------
+step "4/7" "panel venv + deps (3-5 min, wait — pip shows progress below)"
 if [ ! -x "$APP_ROOT/venv_ui/bin/python" ]; then
     log "Creating venv_ui with $PYBIN ..."
     "$PYBIN" -m venv "$APP_ROOT/venv_ui"
@@ -140,6 +145,7 @@ log "Installing pip deps ..."
     'requests==2.34.2' 'huggingface_hub' 'openviking==0.4.16' 'openviking-sdk==0.1.8'
 
 # ---- 5. models (idempotent) -------------------------------------------------
+step "5/7" "models (~2.5GB first time, ollama shows % below)"
 for m in qwen2.5-3b qwen3-embedding:0.6b; do
     if ollama list 2>/dev/null | awk '{print $1}' | grep -qx "$m\|$m:latest"; then
         log "already pulled: $m"
@@ -150,6 +156,7 @@ for m in qwen2.5-3b qwen3-embedding:0.6b; do
 done
 
 # ---- 6. aichat config (new only, unless --force) ----------------------------
+step "6/7" "aichat config"
 if [ -f "$HOME/.config/aichat/config.yaml" ] && [ "$FORCE" = "0" ]; then
     log "aichat config exists — keeping live config (use --force to overwrite)"
 else
@@ -160,6 +167,7 @@ else
 fi
 
 # ---- 7. runtime dirs + start + verify ---------------------------------------
+step "7/7" "start panel + verify"
 mkdir -p "$APP_ROOT/History" "$APP_ROOT/backup" "$APP_ROOT/WORKSPACE"
 chmod +x "$APP_ROOT/run_panel.sh"
 log "Starting panel ..."
