@@ -1529,6 +1529,25 @@ def get_project_context(prompt: str) -> str:
 
 _THINK_TAGS = ('think', 'thinking', 'thought', 'reasoning')
 
+_THINK_HEADERS = (
+    '🧠 thinking',
+    'or calculating? 🙄',
+    'or calculating? 🤦',
+    'or calculating? 😅',
+    '🧠 hmm...',
+    'consulting the tiny brain 🧠',
+)
+
+
+def _think_header() -> str:
+    """Rotate the thinking-block header so it stays funny. Never raises."""
+    try:
+        n = app_state.get("think_n", 0)
+        app_state["think_n"] = n + 1
+        return _THINK_HEADERS[n % len(_THINK_HEADERS)]
+    except Exception:
+        return _THINK_HEADERS[0]
+
 
 def split_thinking(text: str):
     """Split (thinking, answer). Closed <think>...</think> blocks plus a
@@ -2227,7 +2246,7 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                             md_blocks.append(
                                 f"**{init}:**\n\n"
                                 f"<span style='font-size:0.8em;color:#8b949e'>"
-                                f"<b>🧠 thinking:</b><br>{th}</span>"
+                                f"<b>{_think_header()}:</b><br>{th}</span>"
                                 f"\n\n{text}"
                             )
                         else:
