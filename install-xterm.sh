@@ -11,7 +11,7 @@
 #   2. Ollama (official script if missing) + enable + start
 #   3. aichat CLI 0.30.0 (musl static binary -> ~/.local/bin)
 #   4. venv_ui + pip panel deps (nicegui, fastapi/uvicorn, openviking)
-#   5. ollama pull qwen2.5:3b + qwen3-embedding:0.6b (skips what exists)
+#   5. ollama pull qwen2.5:3b (single small LLM, skips if present)
 #   6. deploy aichat-config-template/ -> ~/.config/aichat/ (new only;
 #      use --force to overwrite a live config)
 #   7. start panel (run_panel.sh) + verify http://localhost:8080
@@ -67,7 +67,6 @@ if [ "$CHECK" = "1" ]; then
     command -v aichat >/dev/null && echo "OK aichat: $(aichat --version 2>&1 | head -1)" || echo "MISS aichat"
     [ -f "$HOME/.config/aichat/config.yaml" ] && echo "OK aichat config" || echo "MISS aichat config"
     ollama list 2>/dev/null | grep -q 'qwen2.5:3b' && echo "OK qwen2.5:3b" || echo "MISS qwen2.5:3b"
-    ollama list 2>/dev/null | grep -q 'qwen3-embedding' && echo "OK qwen3-embedding:0.6b" || echo "MISS qwen3-embedding:0.6b"
     curl -s -m 3 http://localhost:8080 >/dev/null && echo "OK panel :8080" || echo "MISS panel :8080"
     exit 0
 fi
@@ -145,15 +144,22 @@ log "Installing pip deps ..."
     'requests==2.34.2' 'huggingface_hub' 'openviking==0.4.16' 'openviking-sdk==0.1.8'
 
 # ---- 5. models (idempotent) -------------------------------------------------
-step "5/7" "models (~2.5GB first time, ollama shows % below)"
-for m in qwen2.5:3b qwen3-embedding:0.6b; do
-    if ollama list 2>/dev/null | awk '{print $1}' | grep -qx "$m\|$m:latest"; then
-        log "already pulled: $m"
-    else
-        log "pulling $m ..."
-        ollama pull "$m" || warn "pull failed for $m (retry: ollama pull $m)"
+step "5/7" "LLM (one small default, your choice)"
+CHAT_MODEL="qwen2.5:3b"
+if ollama list 2>/dev/null | awk '{print $1}' | grep -qx "$CHAT_MODEL\|$CHAT_MODEL:latest"; then
+    log "already pulled: $CHAT_MODEL"
+else
+    ans=""
+    if [ -t 0 ]; then
+        printf 'Pull the default LLM %s now? [Y/n] (n = you supply your own later): ' "$CHAT_MODEL"
+        read -r ans || ans=""
     fi
-done
+    case "$ans" in
+        [nN]*) log "skipped — drop your own GGUF/model and point ~/.config/aichat/config.yaml at it" ;;
+        *) log "pulling $CHAT_MODEL ..."
+           ollama pull "$CHAT_MODEL" || warn "pull failed for $CHAT_MODEL (retry: ollama pull $CHAT_MODEL)" ;;
+    esac
+fi
 
 # ---- 6. aichat config (new only, unless --force) ----------------------------
 step "6/7" "aichat config"
