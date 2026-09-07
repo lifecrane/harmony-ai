@@ -275,3 +275,21 @@ Thin UI in `aichat_xterm.py`, engine in `aichat_model_controller.py`
 - **Vault**: unlock/create/lock, add/delete service, test email,
   ⬇ Import from opencode (deepseek+openrouter only) — via `auth_store.py`
   reused as-is. `credentials.enc` NEVER ships in the friend zip.
+
+## 11. Roles: edit one file, big output win + cloud via OpenRouter
+
+Roles live in `~/.config/aichat/roles/` (`brainstorm.md`, `plan.md`,
+`exec.md`, `qc.md` — deployed from `aichat-config-template/roles/`).
+Each lane reads its role file on every turn (no panel restart needed),
+so tailoring ONE role to a specific intent is the cheapest quality upgrade
+there is. Example: a physics-summary `brainstorm.md` (add `use SI units,
+name the experiment, ≤120 words`) beats any model swap for that task.
+Same for `exec.md` (language + style rules) or `qc.md` (PASS criteria).
+Keep a backup before editing; `--force` reinstall overwrites them.
+
+Cloud (when local is not enough): OpenRouter is an OpenAI-compatible
+gateway — browse models at `https://openrouter.ai/models`, get a key at
+`https://openrouter.ai/keys`, API base `https://openrouter.ai/api/v1`.
+Add a second client block in `~/.config/aichat/config.yaml` with that
+`api_base` + your key, or import it via Vault ⬇ (openrouter supported).
+Local stays default; cloud is per-call fallback.
