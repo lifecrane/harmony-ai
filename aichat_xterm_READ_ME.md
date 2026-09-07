@@ -290,6 +290,8 @@ Keep a backup before editing; `--force` reinstall overwrites them.
 Cloud (when local is not enough): OpenRouter is an OpenAI-compatible
 gateway — browse models at `https://openrouter.ai/models`, get a key at
 `https://openrouter.ai/keys`, API base `https://openrouter.ai/api/v1`.
-Add a second client block in `~/.config/aichat/config.yaml` with that
-`api_base` + your key, or import it via Vault ⬇ (openrouter supported).
-Local stays default; cloud is per-call fallback.
+NOTE: cloud selection is NOT wired in this panel (Team Check / Fastest
+Cloud are white stubs; Sys & Cld Selection lists Ollama locals only).
+Cloud search + favorites + per-role teams live in `niceai.py` and arrive
+with the merge. Keep your Vault `openrouter` entry anyway (shared
+gpg vault, costs nothing) — the merged panel will use it as-is.
