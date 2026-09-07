@@ -151,11 +151,11 @@ if ollama list 2>/dev/null | awk '{print $1}' | grep -qx "$CHAT_MODEL\|$CHAT_MOD
 else
     ans=""
     if [ -t 0 ]; then
-        printf 'Pull the default LLM %s now? [Y/n] (n = you supply your own later): ' "$CHAT_MODEL"
+        printf 'Do you want to pull the default model %s now, or do you want to download one manually yourself to Models/<modelname>? If you refresh the settings in control center, you can load any model in the Models folder, it will be auto imported into ollama. :) [Y/n]: ' "$CHAT_MODEL"
         read -r ans || ans=""
     fi
     case "$ans" in
-        [nN]*) log "skipped — drop your own GGUF/model and point ~/.config/aichat/config.yaml at it" ;;
+        [nN]*) log "skipped — drop your GGUF into Models/<modelname>/ and refresh settings in control center to auto-import :) " ;;
         *) log "pulling $CHAT_MODEL ..."
            ollama pull "$CHAT_MODEL" || warn "pull failed for $CHAT_MODEL (retry: ollama pull $CHAT_MODEL)" ;;
     esac
