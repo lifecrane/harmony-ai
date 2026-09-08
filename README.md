@@ -20,7 +20,36 @@ bash Install-harmony-ai.sh --check    # verify only, changes nothing
 ./run_panel.sh start             # panel on http://localhost:8080
 ```
 
-See `INSTALL.txt` for the manual steps if you prefer not to use the script.
+The installer ends by downloading the two models the panel needs, so it works
+out of the box on a fresh machine:
+
+| Model                  | Size  | Why it is needed                          |
+| ---------------------- | ----- | ----------------------------------------- |
+| `qwen2.5:3b`           | 1.9GB | the chat model (default)                  |
+| `qwen3-embedding:0.6b` | 0.5GB | semantic memory (OpenViking recall)       |
+
+If you skipped the download, the first browser visit shows a welcome window
+with a one-click **Download models** button (same two models) — no terminal
+needed. Prefer to do it by hand? See `INSTALL.txt`.
+
+---
+
+## Cloud in 5 steps (OpenRouter)
+
+Local models are CPU-friendly but small. When you want a bigger model, use
+OpenRouter (an OpenAI-compatible gateway):
+
+1. Get a free key at `https://openrouter.ai/keys`.
+2. In the panel, open **⚙️ Control Center → Vault** → *Create vault* (pick a
+   passphrase) → *Unlock*.
+3. **Add service**: name `openrouter`, paste the key, base URL
+   `https://openrouter.ai/api/v1` (blank also works — it is a known default).
+4. **⚙️ → Sys & Cld Selection** → `☁️ Cloud` → provider `openrouter`, model id
+   e.g. `liquid/lfm-2.5-2.6b:free` → **Use cloud**.
+5. To go back: pick a local model → **Back to local**.
+
+The key stays locked in the gpg-encrypted Vault and is never shipped.
+OpenRouter model ids are listed at `https://openrouter.ai/models`.
 
 ---
 
@@ -279,7 +308,12 @@ small local models. Tested on an i5 quad-core (CPU-only) with good results;
 replies are tuned via aichat roles, which gives strong fine-grained control
 over tone and noise.
 
-- `lfm2-1.2b-rag:latest` (730MB) — fast default, instant chat
+The default and only auto-downloaded model is `qwen2.5:3b` (plus the
+`qwen3-embedding:0.6b` embedding model). The models below are **optional
+extras** that are NOT downloaded automatically — pull whichever you want with
+`ollama pull <name>` and it shows up in the panel:
+
+- `lfm2-1.2b-rag:latest` (730MB) — fast chat, instant replies
 - `granite-4-2-3b-q5-k-m:latest` (2.6GB) — slow reasoning keeper
 - `qwen2.5-7b-q4_k_m:latest` (4.7GB) — quality keeper, no ramble, ~30-50s/turn
 
