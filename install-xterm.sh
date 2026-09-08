@@ -173,6 +173,13 @@ EOF
 step "6/7" "aichat config"
 if [ -f "$HOME/.config/aichat/config.yaml" ] && [ "$FORCE" = "0" ]; then
     log "aichat config exists — keeping live config (use --force to overwrite)"
+    # ...but never leave roles missing: a kept config with no roles/ gives
+    # "Unknown role" on every turn (the laptop 500-era failure). Fill gaps only.
+    mkdir -p "$HOME/.config/aichat/roles"
+    for _r in "$APP_ROOT/aichat-config-template/roles/"*.md; do
+        _b="$(basename "$_r")"
+        [ -f "$HOME/.config/aichat/roles/$_b" ] || cp "$_r" "$HOME/.config/aichat/roles/"
+    done
 else
     log "Deploying aichat-config-template -> ~/.config/aichat/"
     mkdir -p "$HOME/.config/aichat/roles"
