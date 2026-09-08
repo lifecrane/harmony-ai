@@ -23,6 +23,14 @@ start() {
         echo "already running (pid $(cat "$PIDFILE")) — http://localhost:8080"
         return 0
     fi
+    # Fresh copies carry no pidfile — catch a live process first so a second
+    # instance never starts behind it and dies on Errno 98 (the laptop 500).
+    _live="$(pgrep -f "aichat_xterm.py" 2>/dev/null | head -1)"
+    if [ -n "$_live" ]; then
+        echo "$_live" > "$PIDFILE"
+        echo "already running (pid $_live) — http://localhost:8080 (use: ./run_panel.sh restart for new code)"
+        return 0
+    fi
     # Viking memory needs its embedding model; without it every recall
     # silently returns nothing (the .06 outage). Pull once if missing.
     if command -v ollama >/dev/null 2>&1; then
