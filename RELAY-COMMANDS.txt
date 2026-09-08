@@ -7,8 +7,8 @@
 # scp -r ~/harmony-xterm-aichat joao@192.168.122.166:~/
 
 # --- update single files (normal case) ---
-scp joao@192.168.0.6:/home/joao/STORAGE/harmony-xterm-aichat/aichat_xterm.py ~/harmony-xterm-aichat/
-scp ~/harmony-xterm-aichat/aichat_xterm.py joao@192.168.122.166:~/harmony-xterm-aichat/
+scp joao@192.168.0.6:/home/joao/STORAGE/harmony-xterm-aichat/harmony-ai.py ~/harmony-xterm-aichat/
+scp ~/harmony-xterm-aichat/harmony-ai.py joao@192.168.122.166:~/harmony-xterm-aichat/
 
 # --- update the 3 helper modules ---
 scp joao@192.168.0.6:/home/joao/STORAGE/harmony-xterm-aichat/{aichat_docs.py,flow_graph.py,flow_drawio.py} ~/harmony-xterm-aichat/
@@ -19,13 +19,13 @@ scp -r joao@192.168.0.6:/home/joao/STORAGE/harmony-xterm-aichat/assets ~/harmony
 scp -r ~/harmony-xterm-aichat/assets joao@192.168.122.166:~/harmony-xterm-aichat/
 
 # --- update installer ---
-scp joao@192.168.0.6:/home/joao/STORAGE/harmony-xterm-aichat/install-xterm.sh ~/harmony-xterm-aichat/
-scp ~/harmony-xterm-aichat/install-xterm.sh joao@192.168.122.166:~/harmony-xterm-aichat/
+scp joao@192.168.0.6:/home/joao/STORAGE/harmony-xterm-aichat/Install-harmony-ai.sh ~/harmony-xterm-aichat/
+scp ~/harmony-xterm-aichat/Install-harmony-ai.sh joao@192.168.122.166:~/harmony-xterm-aichat/
 
 # ================= GUEST TERMINAL (192.168.122.166) =================
 # cd ~/harmony-xterm-aichat && ./run_panel.sh restart
 # sleep 3
 # tail -15 History/panel.log
-# check: bash install-xterm.sh --check
-# install: bash install-xterm.sh --verbose
+# check: bash Install-harmony-ai.sh --check
+# install: bash Install-harmony-ai.sh --verbose
 # browser (on laptop): http://192.168.122.166:8080

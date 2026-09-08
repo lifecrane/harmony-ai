@@ -295,7 +295,7 @@ BASE_DIR = Path(__file__).resolve().parent  # portable: runs from any folder
 AICHAT_CONFIG = Path.home() / '.config' / 'aichat' / 'config.yaml'
 
 SETTINGS_PATH = BASE_DIR / 'aichat_settings.json'
-_PERSIST_KEYS = ('role', 'hat', 'active_project', 'workdir')
+_PERSIST_KEYS = ('role', 'hat', 'active_project', 'workdir', 'keep_chat_logs')
 
 
 def _aichat_bin() -> str:
@@ -323,6 +323,7 @@ app_state = {
     "active_project": None,
     "hat": "EXPLORE",
     "last_doc": None,
+    "keep_chat_logs": True,
 }
 
 
@@ -1048,13 +1049,52 @@ async def restart_panel():
     """Re-exec this panel in place (it runs bare from a terminal, no unit)."""
     ui.notify('Restarting panel — reconnect in a few seconds...')
     await asyncio.sleep(0.5)
-    os.execv(sys.executable, [sys.executable, str(BASE_DIR / 'aichat_xterm.py')])
+    os.execv(sys.executable, [sys.executable, str(BASE_DIR / 'harmony-ai.py')])
 
 # ============================================================
 # CHAT HISTORY (scrollable conversation)
 # ============================================================
 
 chat_messages = []  # list[{'role': 'user'|'assistant', 'text': str}]
+
+# Chat log (optional, default on): every turn shown in the terminal is appended
+# to History/chat.log when the "Keep chat logs" Control Center checkbox is set.
+# _chat_log_written tracks how many turns we have already flushed so re-renders
+# (and the streaming tail) never duplicate entries.
+_chat_log_written = 0
+
+
+def _chat_log_path():
+    return BASE_DIR / 'History' / 'chat.log'
+
+
+def _flush_chat_log():
+    """Append any not-yet-logged chat turns to History/chat.log. Never raises."""
+    global _chat_log_written
+    try:
+        if not app_state.get('keep_chat_logs', True):
+            _chat_log_written = len(chat_messages)
+            return
+        if _chat_log_written > len(chat_messages):
+            # /clear emptied the visible history — start matching again.
+            _chat_log_written = 0
+        new_msgs = chat_messages[_chat_log_written:]
+        if not new_msgs:
+            return
+        _log_path = _chat_log_path()
+        _log_path.parent.mkdir(parents=True, exist_ok=True)
+        _lines = []
+        for _msg in new_msgs:
+            _who = 'Me' if _msg.get('role') == 'user' else 'Harmony AI'
+            _ts = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+            _lines.append(f'[{_ts}] {_who}')
+            _lines.append((_msg.get('text') or '').rstrip())
+            _lines.append('')
+        with open(_log_path, 'a', encoding='utf-8') as _fh:
+            _fh.write('\n'.join(_lines) + '\n')
+        _chat_log_written = len(chat_messages)
+    except Exception as _e:
+        logging.warning('chat log flush failed: %s', _e)
 
 
 # ============================================================
@@ -2342,6 +2382,10 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                         _refresh_info()
                     except Exception:
                         pass
+                    try:
+                        _flush_chat_log()
+                    except Exception:
+                        pass
 
             # ------------------------------------------------
             # INPUT
@@ -3218,9 +3262,25 @@ def _mc_guard():
     return True
 
 
+def _toggle_chat_logs(e):
+    """Keep chat logs checkbox: persist the choice so a restart remembers it."""
+    app_state['keep_chat_logs'] = bool(e.value)
+    try:
+        save_settings()
+    except Exception:
+        pass
+
+
 def _open_cc_menu():
     with ui.dialog() as dlg, ui.card().classes('p-4 gap-2 min-w-72 dialog-drag'):
         ui.label('⚙️ Control Center').classes('text-lg font-bold text-emerald-400 drag-handle')
+        ui.checkbox(
+            'Keep chat logs',
+            value=bool(app_state.get('keep_chat_logs', True)),
+            on_change=_toggle_chat_logs,
+        ).props('dark').classes(
+            'text-xs text-emerald-400 font-semibold'
+        ).tooltip('Append every turn to History/chat.log')
         ui.button('Sys & Cld Selection', on_click=lambda: (dlg.close(), _cc_models())).classes('w-full')
         ui.button('Model Dwnl', on_click=lambda: (dlg.close(), _cc_download())).classes('w-full')
         ui.button('Diagnostics', on_click=lambda: (dlg.close(), _cc_diag())).classes('w-full')

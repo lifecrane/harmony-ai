@@ -1,7 +1,7 @@
 """aichat_model_controller.py — Models Control Center ENGINE for the aichat panel.
 
 Slim backend for model/HF/vault work (no NiceGUI here). All UI lives in
-aichat_xterm.py; this module does disk + Ollama + HF work and reports via
+harmony-ai.py; this module does disk + Ollama + HF work and reports via
 return values / callbacks so buttons are thin.
 
 Ported from: scan_gguf_folder, import_single_model, delete_model_all_traces,

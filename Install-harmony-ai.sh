@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# install-xterm.sh — harmony-xterm-aichat one-shot installer (Debian headless)
+# Install-harmony-ai.sh — harmony-xterm-aichat one-shot installer (Debian headless)
 #
 # Run INSIDE the repo folder on a bare Debian 12 box (guest, laptop, server):
-#     bash install-xterm.sh            # full install (needs sudo for apt)
-#     bash install-xterm.sh --check    # verify only, changes nothing
+#     bash Install-harmony-ai.sh            # full install (needs sudo for apt)
+#     bash Install-harmony-ai.sh --check    # verify only, changes nothing
 #
 # WHAT IT DOES (idempotent — safe to re-run):
 #   1. apt deps: python3.11, venv, git, curl
@@ -35,12 +35,12 @@ for a in "$@"; do
     esac
 done
 
-log()  { printf '[install-xterm] %s\n' "$*"; }
-warn() { printf '[install-xterm][WARN] %s\n' "$*" >&2; }
-die()  { printf '[install-xterm][ERROR] %s\n' "$*" >&2; exit 1; }
+log()  { printf '[Install-harmony-ai] %s\n' "$*"; }
+warn() { printf '[Install-harmony-ai][WARN] %s\n' "$*" >&2; }
+die()  { printf '[Install-harmony-ai][ERROR] %s\n' "$*" >&2; exit 1; }
 step() { printf '\n===== [%s] %s =====\n' "$1" "$2"; }
 
-[ -f "$APP_ROOT/aichat_xterm.py" ] || die "run from the repo folder ($APP_ROOT/aichat_xterm.py missing)"
+[ -f "$APP_ROOT/harmony-ai.py" ] || die "run from the repo folder ($APP_ROOT/harmony-ai.py missing)"
 
 # sudo handling: root needs none; normal user needs the sudo binary
 if [ "$(id -u)" = "0" ]; then
@@ -161,7 +161,7 @@ else
     esac
 fi
 cat <<'EOF'
-[install-xterm] Tested on i5 quad-core (4 threads, CPU-only) — excellent starting 4:
+[Install-harmony-ai] Tested on i5 quad-core (4 threads, CPU-only) — excellent starting 4:
   1. lfm2-1.2b-rag:latest (730MB) — fast chat, daily default
   2. granite-4-2-3b-q5-k-m:latest (2.6GB) — slow reasoning keeper
   3. olmoe-1b-7b-0924-instruct-q4-k-m:latest (4.2GB) — reasoning + chat MoE
@@ -199,4 +199,4 @@ if curl -s -m 5 http://localhost:8080 >/dev/null; then
 else
     warn "panel not answering yet — see $APP_ROOT/History/panel.log"
 fi
-log "Done. Re-run anytime: bash install-xterm.sh (idempotent)."
+log "Done. Re-run anytime: bash Install-harmony-ai.sh (idempotent)."

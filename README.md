@@ -1,24 +1,22 @@
-# Harmony AI — aichat_xterm panel
+# Harmony AI — harmony-ai panel
 
-A low-resource, CPU-only terminal chat UI for local LLMs. It is a thin,
-single-file NiceGUI frontend that drives the aichat CLI as a subprocess,
-with optional semantic memory via OpenViking, a Mermaid flow board, and a
-self-hosted draw.io , Md editor. Designed to run comfortably on a modest laptop
-(4 cores, no GPU, 16 gb memory, w streamlined cloud conneciton for heavier duty projects).  The project flow pipeline (or what you folks call harness) is not wired . I just wanted to create here an efficient UI. 
+A low-resource, CPU-only terminal chat UI to easily use local LLMs, with easy cloud connection to talk to bigger boys. It is a thin, single-file NiceGUI frontend that drives the aichat CLI as a subprocess, with optional semantic memory via OpenViking, a Mermaid flow board, and a self-hosted draw.io , Md editor. Designed to run comfortably on a modest laptop : (I5 4 cores, no GPU, 16 gb memory, w streamlined cloud conneciton for heavier duty projects).  The project flow pipeline (or what many folks call harness) is not wired yet . I just wanted to create here an efficient UI, that even granny can use. 
 
-- **Frontend:** NiceGUI (browser UI, served on `:8080 , changed default render to xterm, but tx for the dev, I wouldn't know as much `)
+- **Frontend:** NiceGUI (browser UI, served on `:8080 , changed default render to xterm, but tx for the niceui dev, or I wouldn't know as much `)
 - **Model work:** `aichat` CLI (Rust) — the panel never talks to a model API directly
 - **Memory (optional):** OpenViking (`vfind` / `vctx` / `vput`)
 - **Diagrams:** Mermaid (flow board) + draw.io (offline editor)
 - **Vault:** gpg-encrypted credential store via `auth_store.py`
+
+This is an evolving project, still a few more UI things to polish, such as better cloud model selection.  I am not a programmer, so I could not provide much tech support,  but I welcome suggestions.  If anyone wants to tran
 
 ---
 
 ## Quick start
 
 ```bash
-bash install-xterm.sh            # full install (needs sudo for apt)
-bash install-xterm.sh --check    # verify only, changes nothing
+bash Install-harmony-ai.sh            # full install (needs sudo for apt)
+bash Install-harmony-ai.sh --check    # verify only, changes nothing
 ./run_panel.sh start             # panel on http://localhost:8080
 ```
 
@@ -28,12 +26,12 @@ See `INSTALL.txt` for the manual steps if you prefer not to use the script.
 
 ## Screenshots
 
-| | |
-| --- | --- |
-| ![Main screen](screenshots/1.jpg) | ![Role comparisons](screenshots/2.jpg) |
-| ![Model downloader](screenshots/3.jpg) | ![draw.io editor](screenshots/4.jpg) |
-| ![draw.io editor](screenshots/5.jpg) | ![File tree with selection](screenshots/6.jpg) |
-| ![Markdown editor](screenshots/7.jpg) | |
+|                                        |                                                |
+| -------------------------------------- | ---------------------------------------------- |
+| ![Main screen](screenshots/1.jpg)      | ![Role comparisons](screenshots/2.jpg)         |
+| ![Model downloader](screenshots/3.jpg) | ![draw.io editor](screenshots/4.jpg)           |
+| ![draw.io editor](screenshots/5.jpg)   | ![File tree with selection](screenshots/6.jpg) |
+| ![Markdown editor](screenshots/7.jpg)  |                                                |
 
 ---
 
@@ -57,7 +55,7 @@ pip install openviking==0.4.16 openviking-sdk==0.1.8
 pip install requests fastapi uvicorn          # openviking pulls these too
 ```
 
-`aichat_xterm.py` only imports `nicegui`, `aichat_project_controller`,
+`harmony-ai.py` only imports `nicegui`, `aichat_project_controller`,
 `viking` (lazy), and the stdlib. `aichat_project_controller.py` is the panel's
 copy in the same folder (task-order parsing + project listing).
 
@@ -67,7 +65,7 @@ copy in the same folder (task-order parsing + project listing).
 
 | File                               | Role                                                                                                                                       |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `aichat_xterm.py`                  | THE app — NiceGUI UI, hat detection, prompt assembly, launches `aichat`                                                                    |
+| `harmony-ai.py`                  | THE app — NiceGUI UI, hat detection, prompt assembly, launches `aichat`                                                                    |
 | `aichat_project_controller.py`     | project listing, root/here index, `.nav.md`, doc attach, task-order parsing                                                                |
 | `aichat_model_controller.py`       | Control Center engine: Ollama ps/load/evict, GGUF scan/import/delete-traces, tuning, HF search/download, opencode-auth import (no NiceGUI) |
 | `aichat_docs.py`                   | document lookup, page slicing, office-to-text conversion for native `-f`                                                                   |
@@ -80,7 +78,7 @@ copy in the same folder (task-order parsing + project listing).
 | `~/.openviking/ov.conf`            | OpenViking config (embedding model, workspace)                                                                                             |
 | `openviking.service`               | systemd unit for the Viking server                                                                                                         |
 
-Import chain: `aichat_xterm.py` → `aichat_project_controller` → (lazy) `viking`.
+Import chain: `harmony-ai.py` → `aichat_project_controller` → (lazy) `viking`.
 No other local modules are imported; `viking` is only reached on first use, so
 boot cost stays near zero.
 
@@ -202,7 +200,7 @@ always knows where things live regardless of phrasing:
 ```
 [ROOT] <appdir> = app home
 [PROJECTS] WORKSPACE/ = main project folders (N): `a`, `b`, ...
-[RECORDS] History/ = session records + install scripts
+[RECORDS] History/ = session records (chat.log + panel.log) + install scripts
 [TEMPLATES] WORKSPACE/_templates/ = starter templates
 [BACKUPS] backup/ = code backups (.bak files)
 ```
@@ -230,14 +228,14 @@ convert first via `office_to_text` → `/tmp/aichat_docs/<name>.txt` sidecar
 
 ## UI notes
 
-- Role buttons: brainstorm/plan rainbow, exec red, QC green.
+- Role buttons: brainstorm/plan rainbow, exec red, QC green <mark>(only brainstorm is developed atm)</mark>
 - Chat label: `AI Harmony <B|P|E|QC>` in the lane color; user requests light blue.
 - Orange ↻ header button = in-place restart (`os.execv`, no systemd unit).
 - Shift+B toggles the file tree.
 
 ## Control Center (bottom ⚙️ button, right of Execute)
 
-Thin UI in `aichat_xterm.py`, engine in `aichat_model_controller.py`
+Thin UI in `harmony-ai.py`, engine in `aichat_model_controller.py`
 (NiceGUI-free; long ops run in daemon threads). Four popups:
 
 - **Sys & Cld Selection**: Refresh models, Load & Launch, Unload, Tune
@@ -248,6 +246,11 @@ Thin UI in `aichat_xterm.py`, engine in `aichat_model_controller.py`
   disk free (read-only).
 - **Vault**: unlock/create/lock, add/delete service, test email,
   import from opencode — via `auth_store.py`. `credentials.enc` NEVER ships.
+
+The Control Center menu also has a **Keep chat logs** checkbox (default on):
+every turn shown in the terminal is appended to `History/chat.log`, so people
+tuning models can read back the full conversation. Uncheck it to stop logging
+(or to skip a private session); the choice is remembered across restarts.
 
 ---
 
@@ -286,7 +289,7 @@ over tone and noise.
 
 1. `ollama list` — confirm your chat model + `qwen3-embedding:0.6b` present.
 2. `systemctl status openviking` — optional but healthy when used.
-3. (Re)start the app: `venv_ui/bin/python aichat_xterm.py` (serves `:8080`).
+3. (Re)start the app: `venv_ui/bin/python harmony-ai.py` (serves `:8080`).
 4. Smoke test a prompt; watch the top `· BRAINSTORM / <HAT>` badge change
    color per intent (EXPLORE sky / EXPLAIN green / CLARIFY amber /
    STRUCTURE purple / SUMMARIZE pink).
@@ -295,8 +298,8 @@ over tone and noise.
 
 ## Acknowledgements
 
-This panel is only possible because of the open-source work of others. I did
-not write these building blocks — I assembled them:
+This panel is only possible because of the open-source work of other folks. I def did
+not write these building blocks — I just merely assembled them:
 
 - **[NiceGUI](https://nicegui.io/)** — the browser UI framework that turns plain
   Python into a responsive frontend. Without it there is no panel.
@@ -311,17 +314,16 @@ not write these building blocks — I assembled them:
   rendered by Mermaid (no separate dependency).
 - **[draw.io](https://github.com/jgraph/drawio)** (Apache-2.0) — the offline
   flow editor.
-- **The Python community and every coder I forgot to mention** who contributed to the libraries, role prompts, and examples this app leans on — including DeepSeek that was instrumental to make this happen and yes, I used also some chatgpt, gemini, and copilot, for the skills they are good at,  and tx for the other open models that finally made quality local assistance possible, so I just tried to extend the usability for regular joe, since we aren't all geeks :).. At the same time, I needed power, and Aicht was the right tool in the end. 
+- **The Python community and every coder I forgot to mention** who contributed to the libraries, role prompts, and examples this app leans on — including DeepSeek that was very instrumental to make this happen (v4 pro, almost without skipping a beat) and yes, I used also a bit chatgpt, gemini, and copilot, for the skills they are good at,  and tx for all other open models that finally made quality local assistance possible, so I just tried to extend the usability for regular joe, since many of us were raised with hard hand workd, and just type w 3 or 4 fingers .. At the same time, I needed more power at command line, and Aichat came a bit ahead of Aider and others, as the right tool for what I was looking for.  Xterm js gave it that extra push , to make old home pcs great again! :) 
 
-Ps Any mistakes in the glue are mine, not theirs,  and I really could not tell you much how to torubleshoot, I call myself the copy and paste programmer . 
+Ps Any mistakes in the glue are mine, not theirs,  and I really could not tell you much how to torubleshoot, I call myself the copy and paste programmer .  I just like to solve problems , and will do what I can to improve this further, but don't expect fast replies. 
 
 ---
 
 ## Why this exists — a note from the author
 
-I am not a programmer. I can't write this kind of code, not even html page — what I can do is solve problems obiously with Ai help, that is calcualting a bit better these days, but I just glued together the remarkable tools the real wizards built, and I built this panel because I couldn't find an existing tool that readily met my needs, and I do not want to keep my some of my inventiones private. I'm working on [ai-driven-synaptic-recovery.netlify.app](https://ai-driven-synaptic-recovery.netlify.app/), a project to help people with synaptic loss — a condition I also live with — and I needed a fast, low-resource, terminal-style chat UI that would help me build it on a modest laptop. I wanted something simple that would help me code, and
-I'm grateful that DeepSeek and a handful of other capable open models arrived
-to make that possible.
+I am not a programmer. I can't write this kind of code, not even html page, lol — what I can do is solve problems obiously with Ai help, that is calculating a bit better these days, so I just glued together the remarkable tools the real wizards had already built, and I did this panel because I couldn't find an existing light weight tool that readily met my needs, and I do want to keep my some of my inventiones private. I'm working on [ai-driven-synaptic-recovery.netlify.app](https://ai-driven-synaptic-recovery.netlify.app/), a project to help people with synaptic loss — a condition I also live with — and I needed a fast, low-resource, terminal-style chat UI that would help me build stuff on a modest resource pc, and I used a Thinkcentre M700 for this. I wanted something simple that would help me code, and
+I'm grateful especially that affordable DeepSeek and a handful of other capable open models arrived to make that possible.
 
 ---
 
@@ -329,7 +331,7 @@ to make that possible.
 
 This project is released under the **MIT License** — see [LICENSE](LICENSE).
 Commercial use is welcome; you may use, modify, and distribute this software
-freely as long as you keep the copyright notice. Harmony AI copyright belongs
+freely as long as you keep the copyright notice. Harmony copyright belongs
 to Harmonic Alpha LLC.
 
 Bundled third-party components keep their own licenses: Mermaid (MIT),

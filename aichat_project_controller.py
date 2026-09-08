@@ -1125,7 +1125,7 @@ def process_viking_tags(text: str, allow_write: bool = True):
 # ---------------------------------------------------------------------------
 # build_project_context — the single source of truth for "what's in a project?"
 #
-# Injected into chat-model prompts by aichat_xterm.py (get_project_context) so
+# Injected into chat-model prompts by harmony-ai.py (get_project_context) so
 # a model can answer "what files exist", "what tasks are outstanding", "what's
 # the run status" from REAL disk
 # data — never hallucinated. Pure file reads, no model calls, no UI.
@@ -1318,7 +1318,7 @@ def build_project_context(project=None, workspace_root=None):
 
 
 # ---------------------------------------------------------------------------
-# build_root_index — always-on orientation block for aichat_xterm.py.
+# build_root_index — always-on orientation block for harmony-ai.py.
 #
 # Cheap (~8 lines) and UNGATED: injected on every prompt so the model always
 # knows WHERE things live, regardless of phrasing. Tags are stable vocabulary

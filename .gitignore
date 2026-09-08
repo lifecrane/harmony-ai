@@ -11,6 +11,7 @@ credentials.keeppw
 *.enc
 messages.md
 messages.md.bak*
+aichat_settings.json
 .panel.pid
 History/
 backup/

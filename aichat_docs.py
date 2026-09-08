@@ -1,6 +1,6 @@
 """aichat_docs.py — ALL document processing for the aichat panel.
 
-Keeps aichat_xterm.py slim: PDF extract, plain-text read, sidecars,
+Keeps harmony-ai.py slim: PDF extract, plain-text read, sidecars,
 page lookup, hybrid labeled-field pull. No NiceGUI. Heavy libs
 (pymupdf/pymupdf4llm/pdfplumber) import lazily per call, so importing
 this module is always cheap.

@@ -25,7 +25,7 @@ start() {
     fi
     # Fresh copies carry no pidfile — catch a live process first so a second
     # instance never starts behind it and dies on Errno 98 (the laptop 500).
-    _live="$(pgrep -f "aichat_xterm.py" 2>/dev/null | head -1)"
+    _live="$(pgrep -f "harmony-ai.py" 2>/dev/null | head -1)"
     if [ -n "$_live" ]; then
         echo "$_live" > "$PIDFILE"
         echo "already running (pid $_live) — http://localhost:8080 (use: ./run_panel.sh restart for new code)"
@@ -43,7 +43,7 @@ start() {
         echo "WARN: no ollama binary — panel starts, models + recall unavailable"
     fi
     mkdir -p History
-    nohup "$PY" aichat_xterm.py > "$LOG" 2>&1 &
+    nohup "$PY" harmony-ai.py > "$LOG" 2>&1 &
     echo $! > "$PIDFILE"
     sleep 1
     echo "started (pid $(cat "$PIDFILE")) — http://localhost:8080 (log: $LOG)"
@@ -56,7 +56,7 @@ stop() {
         return 0
     fi
     # fallback: no pidfile — match the script by name
-    if pkill -f "aichat_xterm.py"; then
+    if pkill -f "harmony-ai.py"; then
         rm -f "$PIDFILE"
         echo "stopped (by name)"
         return 0
