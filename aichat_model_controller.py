@@ -156,6 +156,52 @@ def ollama_models():
         return []
 
 
+def ollama_pull(name, on_line=None):
+    """Pull a model via Ollama /api/pull (streaming). Returns (ok, msg).
+
+    `on_line(status)` (optional) receives each human-readable progress status
+    from Ollama so a UI can show a live label. Never raises.
+    """
+    def _emit(s):
+        try:
+            if on_line:
+                on_line(str(s))
+        except Exception:
+            pass
+    if requests is None:
+        return False, 'requests missing'
+    name = (name or '').strip()
+    if not name:
+        return False, 'empty model name'
+    try:
+        import requests as _rq
+        last = ''
+        with _rq.post(
+            f'{OLLAMA_URL}/api/pull',
+            json={'name': name, 'stream': True},
+            stream=True,
+            timeout=(10, 3600),
+        ) as resp:
+            if resp.status_code != 200:
+                return False, f'pull {name}: HTTP {resp.status_code}'
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                except Exception:
+                    continue
+                if data.get('error'):
+                    return False, f"pull {name}: {data['error']}"
+                st = data.get('status', '')
+                if st:
+                    last = st
+                    _emit(st)
+        return True, f'pulled {name} ({last})'
+    except Exception as e:
+        return False, f'pull {name} failed: {e}'
+
+
 def _family_core(s):
     """'gemma2' -> 'gemma', 'phi3' -> 'phi', 'lfm2' -> 'lfm'."""
     return re.sub(r'\d+', '', (s or '').lower()).strip('-_. ')

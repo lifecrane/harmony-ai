@@ -5,13 +5,15 @@
 # Run INSIDE the repo folder on a bare Debian 12 box (guest, laptop, server):
 #     bash Install-harmony-ai.sh            # full install (needs sudo for apt)
 #     bash Install-harmony-ai.sh --check    # verify only, changes nothing
+#     bash Install-harmony-ai.sh --skip-models   # install everything EXCEPT model downloads
 #
 # WHAT IT DOES (idempotent — safe to re-run):
 #   1. apt deps: python3.11, venv, git, curl
 #   2. Ollama (official script if missing) + enable + start
 #   3. aichat CLI 0.30.0 (musl static binary -> ~/.local/bin)
 #   4. venv_ui + pip panel deps (nicegui, fastapi/uvicorn, openviking)
-#   5. one small default LLM (your choice) + 4 tested i5 quad-core favs list
+#   5. final download of the 2 models the panel needs
+#      (qwen2.5:3b chat + qwen3-embedding:0.6b memory) + optional extras list
 #   6. deploy aichat-config-template/ -> ~/.config/aichat/ (new only;
 #      use --force to overwrite a live config)
 #   7. start panel (run_panel.sh) + verify http://localhost:8080
@@ -27,11 +29,13 @@ AICHAT_URL="https://github.com/sigoden/aichat/releases/download/v${AICHAT_VER}/a
 FORCE=0
 CHECK=0
 VERBOSE=0
+SKIP_MODELS=0
 for a in "$@"; do
     case "$a" in
         --force) FORCE=1 ;;
         --check) CHECK=1 ;;
         --verbose) VERBOSE=1 ;;
+        --skip-models) SKIP_MODELS=1 ;;
     esac
 done
 
@@ -67,6 +71,7 @@ if [ "$CHECK" = "1" ]; then
     command -v aichat >/dev/null && echo "OK aichat: $(aichat --version 2>&1 | head -1)" || echo "MISS aichat"
     [ -f "$HOME/.config/aichat/config.yaml" ] && echo "OK aichat config" || echo "MISS aichat config"
     ollama list 2>/dev/null | grep -q 'qwen2.5:3b' && echo "OK qwen2.5:3b" || echo "MISS qwen2.5:3b"
+    ollama list 2>/dev/null | grep -q 'qwen3-embedding:0.6b' && echo "OK qwen3-embedding:0.6b" || echo "MISS qwen3-embedding:0.6b"
     curl -s -m 3 http://localhost:8080 >/dev/null && echo "OK panel :8080" || echo "MISS panel :8080"
     exit 0
 fi
@@ -143,29 +148,29 @@ log "Installing pip deps ..."
     'nicegui==3.14.0' 'fastapi==0.141.1' 'uvicorn==0.52.1' \
     'requests==2.34.2' 'huggingface_hub' 'openviking==0.4.16' 'openviking-sdk==0.1.8'
 
-# ---- 5. models (idempotent) -------------------------------------------------
-step "5/7" "LLM (one small default, your choice)"
+# ---- 5. models (final download of the 2 the panel needs) --------------------
+step "5/7" "models — qwen2.5:3b (chat) + qwen3-embedding:0.6b (memory)"
 CHAT_MODEL="qwen2.5:3b"
-if ollama list 2>/dev/null | awk '{print $1}' | grep -qx "$CHAT_MODEL\|$CHAT_MODEL:latest"; then
-    log "already pulled: $CHAT_MODEL"
+EMBED_MODEL="qwen3-embedding:0.6b"
+if [ "$SKIP_MODELS" = "1" ]; then
+    log "skipping model download (--skip-models). Pull later:"
+    log "  ollama pull $CHAT_MODEL ; ollama pull $EMBED_MODEL"
 else
-    ans=""
-    if [ -t 0 ]; then
-        printf 'Pull the default small model %s now? [Y/n] (n skips — drop your own GGUF into Models/<modelname>/ and Harmony AI auto-imports it to Ollama on one selection in control center refresh, creating the Modelfile with template + caps :) ): ' "$CHAT_MODEL"
-        read -r ans || ans=""
-    fi
-    case "$ans" in
-        [nN]*) log "skipped — drop your GGUF into Models/<modelname>/, refresh settings in control center, one selection auto-imports to Ollama with Modelfile :) " ;;
-        *) log "pulling $CHAT_MODEL ..."
-           ollama pull "$CHAT_MODEL" || warn "pull failed for $CHAT_MODEL (retry: ollama pull $CHAT_MODEL)" ;;
-    esac
+    for _model in "$CHAT_MODEL" "$EMBED_MODEL"; do
+        if ollama list 2>/dev/null | awk '{print $1}' | grep -Fxq "$_model"; then
+            log "already pulled: $_model"
+            continue
+        fi
+        log "downloading $_model — this is the one big (~1.9GB) one-time download, please wait ..."
+        ollama pull "$_model" || warn "pull failed for $_model (retry anytime: ollama pull $_model)"
+    done
 fi
 cat <<'EOF'
-[Install-harmony-ai] Tested on i5 quad-core (4 threads, CPU-only) — excellent starting 4:
-  1. lfm2-1.2b-rag:latest (730MB) — fast chat, daily default
-  2. granite-4-2-3b-q5-k-m:latest (2.6GB) — slow reasoning keeper
-  3. olmoe-1b-7b-0924-instruct-q4-k-m:latest (4.2GB) — reasoning + chat MoE
-  4. qwen2.5-7b-q4_k_m:latest (4.7GB) — quality keeper, slow but no ramble
+[Install-harmony-ai] Optional extras (NOT downloaded here — pull only if you want them):
+  lfm2-1.2b-rag:latest (730MB)            — fast chat
+  granite-4-2-3b-q5-k-m:latest (2.6GB)     — slow reasoning
+  olmoe-1b-7b-0924-instruct-q4-k-m (4.2GB) — reasoning + chat MoE
+  qwen2.5-7b-q4_k_m:latest (4.7GB)         — quality keeper
   Add any via Models/<modelname>/ GGUF + one control-center refresh (auto-imports).
 EOF
 

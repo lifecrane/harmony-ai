@@ -1,14 +1,77 @@
-HARMONY PANEL — fresh-box install (Debian headless assumed)
-=====================================================
-1. Prereqs: python3.11, Ollama running, `aichat` CLI binary 0.30.0
-   (https://github.com/sigoden/aichat -> ~/.local/bin/aichat).
-   pip: nicegui requests fastapi uvicorn openviking openviking-sdk
-   (use a venv: python3.11 -m venv venv_ui && venv_ui/bin/pip install ...).
-2. Copy template config: cp -r aichat-config-template/* ~/.config/aichat/
-   Edit ~/.config/aichat/config.yaml `model:` to a tag from `ollama list`.
-   Required pulls: ollama pull qwen2.5:3b ; ollama pull qwen3-embedding:0.6b
-3. Run: ./run_panel.sh start  (panel on http://localhost:8080)
-4. First boot creates empty History/, backup/, messages.md, vault.
-   Vault/credentials NEVER ship — create fresh in the panel.
-Layout: panel .py at root (BASE_DIR portable), template config under
-aichat-config-template/, demo docs under WORKSPACE/mydocs/.
+Harmony AI — install & first-run guide (Debian/Ubuntu headless assumed)
+=======================================================================
+
+EASIEST WAY (one command)
+-------------------------
+Inside the repo folder run:
+
+    bash Install-harmony-ai.sh
+
+That one command does everything and ends by downloading the two models the
+panel needs, so it works immediately:
+
+    qwen2.5:3b             — the chat model  (~1.9 GB)
+    qwen3-embedding:0.6b   — memory/recall    (~0.6 GB)
+
+Then open the panel:
+
+    ./run_panel.sh start          # panel on http://localhost:8080
+    # or: ./run_panel.sh status   # is it running?
+
+Verify any time (changes nothing):
+
+    bash Install-harmony-ai.sh --check
+
+The installer is safe to re-run. Add --skip-models if you already have
+models and do not want the ~2.4 GB download.
+
+WHAT THE INSTALLER DOES
+-----------------------
+  1. system packages (python3.11, venv, git, curl)   [needs sudo]
+  2. Ollama (local model server) + start it
+  3. aichat CLI 0.30.0  (the LLM client) -> ~/.local/bin
+  4. python venv_ui + panel libraries (NiceGUI, OpenViking, ...)
+  5. download qwen2.5:3b + qwen3-embedding:0.6b
+  6. copy the aichat config template -> ~/.config/aichat/
+  7. start the panel and confirm it answers on :8080
+
+MANUAL STEPS (if you do NOT want the script)
+--------------------------------------------
+  1. python3.11, plus: pip install nicegui==3.14.0 requests fastapi uvicorn
+     openviking==0.4.16 openviking-sdk==0.1.8  (inside a venv)
+  2. install Ollama (https://ollama.com) and start it
+  3. install aichat CLI 0.30.0 (https://github.com/sigoden/aichat)
+     into ~/.local/bin/aichat
+  4. pull the 2 models:
+        ollama pull qwen2.5:3b
+        ollama pull qwen3-embedding:0.6b
+  5. copy the config:  cp -r aichat-config-template/* ~/.config/aichat/
+  6. run:  ./run_panel.sh start
+
+FIRST BROWSER VISIT
+-------------------
+If the installer was run, models are already there and the panel just works.
+If you used --skip-models, the first visit shows a welcome window with a
+one-click "Download models" button — click it and wait for "✅ pulled".
+
+CLOUD (OpenRouter — free models, optional)
+------------------------------------------
+Local models are small and CPU-friendly. For a bigger model use OpenRouter:
+
+  1. Get a free key:  https://openrouter.ai/keys   (no card needed)
+  2. Panel → ⚙️ Control Center → Vault → Create vault (a passphrase) → Unlock
+  3. Vault → Add service:  name  openrouter , paste your key
+     (leave Base URL empty — openrouter is a known default)
+  4. ⚙️ Control Center → Sys & Cld Selection → ☁️ Cloud:
+        provider  openrouter
+        model id  e.g.  liquid/lfm-2.5-2.6b:free   (free model ids are at
+        https://openrouter.ai/models — look for the FREE badge)
+        click  Use cloud
+  5. Back to local any time: pick a local model → Back to local.
+
+Your key lives only in the local gpg-encrypted Vault and is never shipped.
+
+LAYOUT
+------
+panel (.py) files are at the repo root; aichat config template is in
+aichat-config-template/; demo docs are under WORKSPACE/mydocs/.

@@ -356,6 +356,127 @@ def load_settings():
 load_settings()
 
 
+# ============================================================
+# FIRST-RUN WELCOME (models + cloud key)
+# ============================================================
+
+DEFAULT_MODELS = ('qwen2.5:3b', 'qwen3-embedding:0.6b')
+FIRST_RUN_MARKER = BASE_DIR / '.first_run_done'
+
+_OPENROUTER_HELP = (
+    '<div style="font-size:12px;color:#c4b5fd;line-height:1.6">'
+    '1. Sign up free and create a key at '
+    '<b style="color:#a78bfa">https://openrouter.ai/keys</b> '
+    '(no card needed for the FREE models).<br>'
+    '2. In this panel: ⚙️ <b>Control Center → Vault</b> → Create + Unlock.<br>'
+    '3. <b>Add service</b>: name <b>openrouter</b>, paste the key, Base URL '
+    '<b>https://openrouter.ai/api/v1</b> (blank is fine — it is a default).<br>'
+    '4. ⚙️ <b>Sys &amp; Cld Selection → ☁️ Cloud</b>: provider '
+    '<b>openrouter</b>, model id e.g. <b>liquid/lfm-2.5-2.6b:free</b> → '
+    '<b>Use cloud</b>.<br>'
+    'Free model ids live at <b>https://openrouter.ai/models</b> '
+    '(look for the <b>FREE</b> badge).</div>'
+)
+
+
+def _missing_default_models():
+    """Names of the panel's 2 default models that are NOT pulled yet."""
+    try:
+        if not HAS_MC:
+            return list(DEFAULT_MODELS)
+        have = set(_mc.ollama_tags())
+    except Exception:
+        have = set()
+    return [m for m in DEFAULT_MODELS if m not in have]
+
+
+def _first_run_done(dlg):
+    try:
+        FIRST_RUN_MARKER.write_text('done', encoding='utf-8')
+    except Exception:
+        pass
+    try:
+        dlg.close()
+    except Exception:
+        pass
+
+
+def _first_run_pull(status_lbl, btn_pull):
+    """One-click download of the 2 default models (daemon thread)."""
+    import threading
+    if not HAS_MC:
+        try:
+            status_lbl.set_text('Model controller missing — re-run the installer.')
+        except Exception:
+            pass
+        return
+    try:
+        btn_pull.enabled = False
+        btn_pull.update()
+    except Exception:
+        pass
+
+    def _job():
+        for m in _missing_default_models():
+            def _line(s, _m=m):
+                try:
+                    status_lbl.set_text(f'⬇️ {_m}: {s}')
+                except Exception:
+                    pass
+            ok, msg = _mc.ollama_pull(m, on_line=_line)
+            try:
+                status_lbl.set_text(('✅ ' if ok else '❌ ') + msg)
+            except Exception:
+                pass
+        try:
+            btn_pull.text = ('Download models' if _missing_default_models()
+                             else 'Models downloaded — close me')
+            btn_pull.enabled = True
+            btn_pull.update()
+        except Exception:
+            pass
+        if not _missing_default_models():
+            safe_notify('Models ready — pick one in Sys & Cld Selection, then chat.')
+
+    threading.Thread(target=_job, daemon=True).start()
+
+
+def _first_run_welcome():
+    """Open the welcome dialog on the first browser visit when the 2 default
+    models are missing. The installer normally pulls them; this is the
+    in-browser fallback so a fresh clone never lands on an empty Ollama."""
+    try:
+        if FIRST_RUN_MARKER.is_file():
+            return
+        missing = _missing_default_models()
+    except Exception:
+        missing = list(DEFAULT_MODELS)
+    if not missing:
+        try:
+            FIRST_RUN_MARKER.write_text('done', encoding='utf-8')
+        except Exception:
+            pass
+        return
+
+    dlg = ui.dialog()
+    with dlg, ui.card().classes('p-4 gap-2 min-w-[32rem] max-w-[94vw] dialog-drag'):
+        ui.label('👋 Welcome to Harmony AI').classes('text-xl font-bold text-emerald-400 drag-handle')
+        ui.label('Two quick one-time steps and you are chatting:').classes('text-sm text-gray-300')
+        ui.separator().classes('bg-gray-700')
+        ui.label('1️⃣ Download the 2 models').classes('text-sm font-semibold text-sky-300')
+        status_lbl = ui.label('').classes('text-xs font-mono text-yellow-300')
+        btn_pull = ui.button(
+            'Download models (qwen2.5:3b + qwen3-embedding:0.6b)',
+            on_click=lambda: _first_run_pull(status_lbl, btn_pull),
+        ).classes('bg-sky-600 text-white')
+        ui.separator().classes('bg-gray-700')
+        ui.label('2️⃣ Cloud (OpenRouter — free models, optional)').classes('text-sm font-semibold text-purple-300')
+        ui.html(_OPENROUTER_HELP)
+        with ui.row().classes('gap-2 w-full justify-end mt-1'):
+            ui.button('Close', on_click=lambda: _first_run_done(dlg)).props('flat')
+    dlg.open()
+
+
 def safe_notify(msg, type='positive', timeout=5000):
     """ui.notify that never raises — background threads must not crash when the
     browser tab is closed/deleted (NiceGUI 'Client has been deleted')."""
@@ -1983,6 +2104,9 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
 
     ui.timer(4.0, lambda: _auto_warm_default(), once=True)
 
+    # First browser visit with no models? Show the welcome + download helper.
+    ui.timer(1.0, lambda: _first_run_welcome(), once=True)
+
     # --------------------------------------------------------
     # MAIN SPLIT WORKSPACE
     # --------------------------------------------------------
@@ -3295,6 +3419,12 @@ def _cc_models():
         return
     with ui.dialog() as dlg, ui.card().classes('p-4 gap-2 min-w-96 dialog-drag'):
         ui.label('Sys & Cld Selection').classes('text-lg font-bold text-emerald-400 drag-handle')
+        ui.html(
+            'Local: drop a <b>.gguf</b> into the <b>Models/</b> folder, then Refresh '
+            'to auto-import it to Ollama. Cloud: add an OpenRouter API key in '
+            '<b>Vault</b> (free key at <b>openrouter.ai/keys</b>) to use their '
+            'FREE and paid models.'
+        ).classes('text-[10px] text-gray-400 leading-snug')
         loaded_lbl = ui.label('').classes('text-xs text-yellow-400 font-mono')
         ping_lbl = ui.label('').classes('text-xs text-sky-300 font-mono')
         prog_lbl = ui.label('').classes('text-xs font-mono text-yellow-300')
@@ -3330,6 +3460,14 @@ def _cc_models():
             'openrouter': 'https://openrouter.ai/api/v1',
             'deepseek': 'https://api.deepseek.com/v1',
         }
+
+        # One-line help so a fresh user can get a key + a free model id
+        # without leaving the panel (mirrored in the first-run welcome).
+        ui.html(
+            'No key yet? Get a free one at <b>openrouter.ai/keys</b>, then add it '
+            'in <b>Vault</b> (service <b>openrouter</b>). Free model ids are at '
+            '<b>openrouter.ai/models</b> — try <b>liquid/lfm-2.5-2.6b:free</b>.'
+        ).classes('text-[11px] text-purple-300/70 leading-snug')
 
         def _cloud_status():
             try:
