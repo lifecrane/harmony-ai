@@ -1,4 +1,4 @@
-model: ollama:qwen2.5-3b
+model: ollama:qwen2.5:3b
 temperature: null
 top_p: null
 
@@ -22,5 +22,5 @@ clients:
     api_base: http://localhost:11434/v1
     api_key: ollama
     models:
-      - name: qwen2.5-3b
+      - name: qwen2.5:3b
         max_input_tokens: 8192

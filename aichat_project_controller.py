@@ -1,16 +1,13 @@
-"""aichat_project_controller.py — PANEL'S COPY of project_controller.py.
+"""aichat_project_controller.py — the panel's project-management controller.
 
-Copied 2026-09-04 so the aichat panel never confuses with niceai's file.
-RULE: nav/context fixes must land in BOTH files (they diverge otherwise).
-References to "niceai" below are historical (origin), not imports — this
-module is stdlib-only.
+Stdlib-only (no imports beyond the standard library).
 
 Origin: project_controller.py — Model-agnostic project management controller.
 
 Why this exists
 ---------------
 The panel's project flow (intake -> draft task order -> confirm -> execute) was
-scattered inside niceai.py and depended on whichever model answered the chat
+scattered across chat prompts and depended on whichever model answered the chat
 (lfm, nemotron, laguna, north-mini all behave slightly differently). That made
 the flow inconsistent and fragile. This module owns that state machine so the
 behaviour is DETERMINISTIC regardless of the underlying model.
@@ -40,7 +37,7 @@ from typing import Callable, Optional
 
 
 # ---------------------------------------------------------------------------
-# Task-order parsing + default test commands (moved out of niceai.py).
+# Task-order parsing + default test commands.
 # These are pure leaf utilities — no UI, no model, no side effects.
 # ---------------------------------------------------------------------------
 
@@ -459,7 +456,7 @@ def append_tmp_milestone(task_order_text, feature_text):
     feature_text = (feature_text or '').strip()
     if not feature_text:
         return task_order_text
-    # auto dedup: only exact normalized duplicate → silent ignore; near-duplicate handled by niceai ask
+    # auto dedup: only exact normalized duplicate → silent ignore; near-duplicate handled by ask
     try:
         existing = pending_milestones(task_order_text) or []
         existing_norm = {re.sub(r'\W+', ' ', p).strip().lower() for p in existing}
@@ -889,7 +886,7 @@ def _tidy_name(t: str) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
-# Project TEMPLATES (rarely used) — moved out of niceai.py.
+# Project TEMPLATES (rarely used).
 # These depend on filesystem paths; we accept them as params so the module stays
 # self-contained and unit-testable without the panel globals.
 # ---------------------------------------------------------------------------
@@ -1041,7 +1038,7 @@ def save_project_as_template(project_name, workspace_root, templates_root, proje
 # raises). This section owns the AGENT SIDE: a parser that detects the
 # <vctx> / <vput> / <vfind> tags in free text and routes each one to the
 # plugin, replacing the tag with its result so the answer flows straight into
-# the niceai chain.
+# the chat pipeline.
 #
 # Tag grammar (case-insensitive, content may span lines):
 #   <vput>path, data</vput>           store `data` at `path`
@@ -1128,9 +1125,9 @@ def process_viking_tags(text: str, allow_write: bool = True):
 # ---------------------------------------------------------------------------
 # build_project_context — the single source of truth for "what's in a project?"
 #
-# Injected into chat-model prompts by BOTH niceai.py (_project_context_for_llm)
-# and aichat_xterm.py (get_project_context) so a model can answer "what files
-# exist", "what tasks are outstanding", "what's the run status" from REAL disk
+# Injected into chat-model prompts by aichat_xterm.py (get_project_context) so
+# a model can answer "what files exist", "what tasks are outstanding", "what's
+# the run status" from REAL disk
 # data — never hallucinated. Pure file reads, no model calls, no UI.
 # ---------------------------------------------------------------------------
 
@@ -1336,7 +1333,7 @@ def build_project_context(project=None, workspace_root=None):
 # tag -> (relative path, one-line meaning). Edit here, not in prompts.
 ROOT_TAGS = {
     'PROJECTS': ('WORKSPACE', 'main project folders (each subfolder = one project)'),
-    'RECORDS': ('History', 'niceai session records + install scripts'),
+    'RECORDS': ('History', 'session records + install scripts'),
     'TEMPLATES': ('WORKSPACE/_templates', 'starter templates for new projects'),
     'BACKUPS': ('backup', 'code backups (.bak files)'),
 }

@@ -3355,8 +3355,8 @@ def _cc_models():
 
         def _render_tag_chips():
             # Usability tags for the selected model (label-only badges from
-            # local_tags.py — same pattern as niceai.py cloud ⭐/· free badges).
-            # Toggles persist to Models/local_tags.json, merge-clean to niceai.
+            # local_tags.py — same pattern as the cloud ⭐/· free badges).
+            # Toggles persist to Models/local_tags.json.
             tag_row.clear()
             try:
                 import local_tags as _lt

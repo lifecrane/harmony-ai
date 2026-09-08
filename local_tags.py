@@ -1,13 +1,13 @@
 # === SECTION: LOCAL MODEL USABILITY TAGS ===
 """Local-model usability tags — label-only badges for the model dropdown.
 
-Pattern matches niceai.py cloud badges (FEATURES.md: `· free` + `⭐`):
+Pattern matches the cloud badges (`· free` + `⭐`):
   VALUE stays clean (`[LCL] <ollama-name>`, backend strips it).
   LABEL gets suffix (`[LCL] <name> · fast · chat`).
 
 Persisted in Models/local_tags.json: { "<ollama-name>": ["fast", ...] }.
-Fixed vocabulary so a later niceai.py merge just imports this file and
-feeds tags into MODEL_CAPABILITIES notes / _cloud_dropdown_label logic.
+Fixed vocabulary so a future merge can import this file and feed tags into
+model-capability notes / dropdown-label logic.
 
 Rule: absent = not fit / untested. No negative tags — if a model lacks
 `reasoning`, the UI treats it as not-for-reasoning. A niche star (e.g.
@@ -152,8 +152,8 @@ def local_dropdown_label(name):
 def sort_key_for_label(label):
     """Dropdown order: default/keeper first, drop last, rest alphabetical.
 
-    Returns (group, name). Merge note: niceai.py can reuse this to float
-    preferred teams the same way it floats ⭐ clouds today.
+    Returns (group, name). Reusable to float preferred teams the same way
+    ⭐ clouds are floated today.
     """
     try:
         base = strip_label(label)

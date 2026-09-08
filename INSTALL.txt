@@ -6,7 +6,7 @@ HARMONY PANEL — fresh-box install (Debian headless assumed)
    (use a venv: python3.11 -m venv venv_ui && venv_ui/bin/pip install ...).
 2. Copy template config: cp -r aichat-config-template/* ~/.config/aichat/
    Edit ~/.config/aichat/config.yaml `model:` to a tag from `ollama list`.
-   Required pulls: ollama pull qwen2.5-3b ; ollama pull qwen3-embedding:0.6b
+   Required pulls: ollama pull qwen2.5:3b ; ollama pull qwen3-embedding:0.6b
 3. Run: ./run_panel.sh start  (panel on http://localhost:8080)
 4. First boot creates empty History/, backup/, messages.md, vault.
    Vault/credentials NEVER ship — create fresh in the panel.

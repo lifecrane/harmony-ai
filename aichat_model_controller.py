@@ -1,8 +1,8 @@
 """aichat_model_controller.py — Models Control Center ENGINE for the aichat panel.
 
-Slim port of niceai.py's model/HF/vault backend (no NiceGUI here, no niceai
-imports). All UI lives in aichat_xterm.py; this module does disk + Ollama +
-HF work and reports via return values / callbacks so buttons are thin.
+Slim backend for model/HF/vault work (no NiceGUI here). All UI lives in
+aichat_xterm.py; this module does disk + Ollama + HF work and reports via
+return values / callbacks so buttons are thin.
 
 Ported from: scan_gguf_folder, import_single_model, delete_model_all_traces,
 load/save_model_tuning, search_hf_models, list_gguf_files, download_hf_file,
@@ -85,7 +85,7 @@ def _clean(name):
 
 
 def tag_local(name):
-    """niceai-style [LCL] prefix + usability tags for dropdown display.
+    """[LCL] prefix + usability tags for dropdown display.
 
     Label-only: `qwen2.5-7b...` -> `[LCL] qwen2.5-7b... · reasoning · slow`.
     _clean strips it back, so load/unload/ping/tune paths are unaffected.
