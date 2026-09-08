@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Install-harmony-ai.sh — harmony-xterm-aichat one-shot installer (Debian headless)
+# Install-harmony-ai.sh — harmony-ai one-shot installer (Debian headless)
 #
 # Run INSIDE the repo folder on a bare Debian 12 box (guest, laptop, server):
 #     bash Install-harmony-ai.sh            # full install (needs sudo for apt)
