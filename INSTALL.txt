@@ -5,7 +5,7 @@ EASIEST WAY (one command)
 -------------------------
 Inside the repo folder run:
 
-    bash Install-harmony-ai.sh
+    bash install-harmony-ai.sh
 
 That one command does everything and ends by downloading the two models the
 panel needs, so it works immediately:
@@ -20,7 +20,7 @@ Then open the panel:
 
 Verify any time (changes nothing):
 
-    bash Install-harmony-ai.sh --check
+    bash install-harmony-ai.sh --check
 
 The installer is safe to re-run. Add --skip-models if you already have
 models and do not want the ~2.4 GB download.

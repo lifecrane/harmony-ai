@@ -37,8 +37,8 @@ This is an evolving project, still a few more UI things to polish, such as bette
 ## Quick start
 
 ```bash
-bash Install-harmony-ai.sh            # full install (needs sudo for apt)
-bash Install-harmony-ai.sh --check    # verify only, changes nothing
+bash install-harmony-ai.sh            # full install (needs sudo for apt)
+bash install-harmony-ai.sh --check    # verify only, changes nothing
 ./run_panel.sh start             # panel on http://localhost:8080
 ```
 

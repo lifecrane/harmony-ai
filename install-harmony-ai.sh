@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Install-harmony-ai.sh — harmony-ai one-shot installer (Debian headless)
+# install-harmony-ai.sh — harmony-ai one-shot installer (Debian headless)
 #
 # Run INSIDE the repo folder on a bare Debian 12 box (guest, laptop, server):
-#     bash Install-harmony-ai.sh            # full install (needs sudo for apt)
-#     bash Install-harmony-ai.sh --check    # verify only, changes nothing
-#     bash Install-harmony-ai.sh --skip-models   # install everything EXCEPT model downloads
+#     bash install-harmony-ai.sh            # full install (needs sudo for apt)
+#     bash install-harmony-ai.sh --check    # verify only, changes nothing
+#     bash install-harmony-ai.sh --skip-models   # install everything EXCEPT model downloads
 #
 # WHAT IT DOES (idempotent — safe to re-run):
 #   1. apt deps: python3.11, venv, git, curl
@@ -204,4 +204,4 @@ if curl -s -m 5 http://localhost:8080 >/dev/null; then
 else
     warn "panel not answering yet — see $APP_ROOT/History/panel.log"
 fi
-log "Done. Re-run anytime: bash Install-harmony-ai.sh (idempotent)."
+log "Done. Re-run anytime: bash install-harmony-ai.sh (idempotent)."

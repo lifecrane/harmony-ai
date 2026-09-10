@@ -19,13 +19,13 @@ scp -r joao@192.168.0.6:/home/joao/STORAGE/harmony-ai/assets ~/harmony-ai/
 scp -r ~/harmony-ai/assets joao@192.168.122.166:~/harmony-ai/
 
 # --- update installer ---
-scp joao@192.168.0.6:/home/joao/STORAGE/harmony-ai/Install-harmony-ai.sh ~/harmony-ai/
-scp ~/harmony-ai/Install-harmony-ai.sh joao@192.168.122.166:~/harmony-ai/
+scp joao@192.168.0.6:/home/joao/STORAGE/harmony-ai/install-harmony-ai.sh ~/harmony-ai/
+scp ~/harmony-ai/install-harmony-ai.sh joao@192.168.122.166:~/harmony-ai/
 
 # ================= GUEST TERMINAL (192.168.122.166) =================
 # cd ~/harmony-ai && ./run_panel.sh restart
 # sleep 3
 # tail -15 History/panel.log
-# check: bash Install-harmony-ai.sh --check
-# install: bash Install-harmony-ai.sh --verbose
+# check: bash install-harmony-ai.sh --check
+# install: bash install-harmony-ai.sh --verbose
 # browser (on laptop): http://192.168.122.166:8080
