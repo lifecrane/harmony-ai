@@ -33,7 +33,23 @@ start() {
     fi
     # Viking memory needs its embedding model; without it every recall
     # silently returns nothing (the .06 outage). Pull once if missing.
+    # Ollama must be serving before anything else (laptop had no server —
+    # panel started with dead models). Same method as the installer step 2.
     if command -v ollama >/dev/null 2>&1; then
+        if ! curl -s -m 2 http://localhost:11434/api/tags >/dev/null 2>&1; then
+            echo "starting ollama server ..."
+            if systemctl list-unit-files 2>/dev/null | grep -q '^ollama.service'; then
+                (sudo systemctl enable --now ollama 2>/dev/null || systemctl --user start ollama 2>/dev/null) || true
+            else
+                (ollama serve >./History/ollama.log 2>&1 &) || true
+            fi
+            for _i in $(seq 1 20); do
+                curl -s -m 2 http://localhost:11434/api/tags >/dev/null 2>&1 && break
+                sleep 1
+            done
+            curl -s -m 2 http://localhost:11434/api/tags >/dev/null 2>&1 \
+                || echo "WARN: Ollama API still down on :11434 — panel starts, models unavailable"
+        fi
         if ! ollama list 2>/dev/null | grep -q 'qwen3-embedding'; then
             echo "pulling qwen3-embedding:0.6b (Viking memory needs it) ..."
             ollama pull qwen3-embedding:0.6b 2>&1 | tail -1 \
@@ -80,7 +96,13 @@ case "${1:-start}" in
         if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
             echo "running (pid $(cat "$PIDFILE")) — http://localhost:8080"
         else
-            echo "not running"
+            _live="$(pgrep -f "harmony-ai.py" 2>/dev/null | head -1)"
+            if [ -n "$_live" ]; then
+                echo "$_live" > "$PIDFILE"
+                echo "running (pid $_live) — http://localhost:8080 (pidfile restored)"
+            else
+                echo "not running"
+            fi
         fi
         ;;
     *) echo "usage: $0 {start|stop|restart|status}" ;;

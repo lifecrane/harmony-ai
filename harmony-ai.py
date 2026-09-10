@@ -389,6 +389,10 @@ load_settings()
 # ============================================================
 
 DEFAULT_MODELS = ('qwen2.5:3b', 'qwen3-embedding:0.6b')
+# First-run recommended pick (Ollama registry — no HF login needed).
+# gemma2:2b is the official small Gemma; embedding stays qwen (Viking needs it).
+FIRST_RUN_CHAT = 'gemma2:2b'
+FIRST_RUN_EMBED = 'qwen3-embedding:0.6b'
 FIRST_RUN_MARKER = BASE_DIR / '.first_run_done'
 
 _OPENROUTER_HELP = (
@@ -427,6 +431,97 @@ def _first_run_done(dlg):
         dlg.close()
     except Exception:
         pass
+
+
+def _first_run_pull_auto(status_lbl, prog_bar, btn_auto, btn_manual, dlg):
+    """Option 1: pull Gemma + embedding, set default, load into RAM.
+
+    Daemon thread so the UI stays alive. Label + bar update live
+    (percent comes from ollama_pull's completed/total). Never raises."""
+    import re
+    import threading
+
+    def _show(text):
+        try:
+            status_lbl.set_text(text)
+            status_lbl.update()
+        except Exception:
+            pass
+
+    def _prog_from(text):
+        try:
+            m = re.search(r'(\d+)\s*%\s*$', text or '')
+            if m:
+                prog_bar.value = max(0.0, min(1.0, int(m.group(1)) / 100.0))
+                prog_bar.update()
+        except Exception:
+            pass
+    if not HAS_MC:
+        try:
+            status_lbl.set_text('Model controller missing — re-run the installer.')
+        except Exception:
+            pass
+        return
+    for _b in (btn_auto, btn_manual):
+        try:
+            _b.enabled = False
+            _b.update()
+        except Exception:
+            pass
+
+    try:
+        prog_bar.visible = True
+        prog_bar.value = 0
+        prog_bar.update()
+    except Exception:
+        pass
+
+    def _job():
+        for m in (FIRST_RUN_CHAT, FIRST_RUN_EMBED):
+            try:
+                prog_bar.value = 0
+                prog_bar.update()
+            except Exception:
+                pass
+            def _line(s, _m=m):
+                _show(f'⬇️ {_m}: {s}')
+                _prog_from(s)
+            ok, msg = _mc.ollama_pull(m, on_line=_line)
+            _show(('✅ ' if ok else '❌ ') + msg)
+            if not ok:
+                break
+        else:
+            # both pulled — select as default + load
+            _show(f'⚙️ setting default: {FIRST_RUN_CHAT} ...')
+            try:
+                _mc.set_aichat_model(FIRST_RUN_CHAT)
+            except Exception as ex:
+                logging.warning('first-run set_aichat_model failed: %s', ex)
+            _show(f'🔥 loading {FIRST_RUN_CHAT} into RAM ...')
+            try:
+                ok, msg = _mc.load_model(FIRST_RUN_CHAT, timeout=900,
+                                         base_dir=str(BASE_DIR))
+                _show(('✅ ' if ok else '❌ ') + msg)
+            except Exception as ex:
+                _show(f'❌ load failed: {ex}')
+        try:
+            btn_auto.text = 'Models ready — close me'
+            btn_auto.enabled = True
+            btn_auto.update()
+            btn_manual.enabled = True
+            btn_manual.update()
+        except Exception:
+            pass
+        safe_notify(f'{FIRST_RUN_CHAT} ready — chatting with Gemma.')
+
+    threading.Thread(target=_job, daemon=True).start()
+
+
+def _first_run_manual(dlg):
+    """Option 2: user picks their own model via HF Downloader / left card."""
+    safe_notify('Your call — Models Control Center → 📥 HF Downloader, '
+                'then 🧠 left card → Load & Launch.')
+    _first_run_done(dlg)
 
 
 def _first_run_pull(status_lbl, btn_pull):
@@ -484,12 +579,23 @@ def _first_run_welcome():
         ui.label('👋 Welcome to Harmony AI').classes('text-xl font-bold text-emerald-400 drag-handle')
         ui.label('Two quick one-time steps and you are chatting:').classes('text-sm text-gray-300')
         ui.separator().classes('bg-gray-700')
-        ui.label('1️⃣ Download the 2 models').classes('text-sm font-semibold text-sky-300')
+        ui.label('1️⃣ Recommended: Gemma (auto)').classes('text-sm font-semibold text-sky-300')
+        ui.label(f'Press 1 — downloads {FIRST_RUN_CHAT} + {FIRST_RUN_EMBED}, '
+                 'sets Gemma as default and loads it. No terminal needed.'
+                 ).classes('text-xs text-gray-400')
         status_lbl = ui.label('').classes('text-xs font-mono text-yellow-300')
-        btn_pull = ui.button(
-            'Download models (qwen2.5:3b + qwen3-embedding:0.6b)',
-            on_click=lambda: _first_run_pull(status_lbl, btn_pull),
+        prog_bar = ui.linear_progress(value=0).classes('w-full')
+        prog_bar.visible = False
+        btn_auto = ui.button(
+            f'1 — Download Gemma ({FIRST_RUN_CHAT} + {FIRST_RUN_EMBED})',
+            on_click=lambda: _first_run_pull_auto(status_lbl, prog_bar, btn_auto, btn_manual, dlg),
         ).classes('bg-sky-600 text-white')
+        btn_manual = ui.button(
+            '2 — I will pick my own (HF Downloader)',
+            on_click=lambda: _first_run_manual(dlg),
+        ).classes('bg-slate-700 text-white')
+        # legacy single-button entry kept for INSTALL.txt reference
+        btn_pull = btn_auto
         ui.separator().classes('bg-gray-700')
         ui.label('2️⃣ Cloud (OpenRouter — free models, optional)').classes('text-sm font-semibold text-purple-300')
         ui.html(_OPENROUTER_HELP)

@@ -194,9 +194,16 @@ def ollama_pull(name, on_line=None):
                 if data.get('error'):
                     return False, f"pull {name}: {data['error']}"
                 st = data.get('status', '')
+                try:
+                    _comp = data.get('completed')
+                    _tot = data.get('total')
+                    _pct = (f' {100.0 * _comp / _tot:.0f}%'
+                            if _comp is not None and _tot else '')
+                except Exception:
+                    _pct = ''
                 if st:
-                    last = st
-                    _emit(st)
+                    last = st + _pct
+                    _emit(last)
         return True, f'pulled {name} ({last})'
     except Exception as e:
         return False, f'pull {name} failed: {e}'
