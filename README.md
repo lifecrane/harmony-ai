@@ -80,7 +80,7 @@ OpenRouter model ids are listed at `https://openrouter.ai/models`.
 |                                        |                                                |
 | -------------------------------------- | ---------------------------------------------- |
 | ![Main screen](screenshots/1.jpg)      | ![Role comparisons](screenshots/2.jpg)         |
-| ![Model downloader](screenshots/3.jpg) | ![draw.io editor](screenshots/4.jpg)           |
+| ![tmux x4 grid](screenshots/tmux-at-work.jpg) | ![draw.io editor](screenshots/4.jpg)           |
 | ![draw.io editor](screenshots/5.jpg)   | ![File tree with selection](screenshots/6.jpg) |
 | ![Markdown editor](screenshots/7.jpg)  | ![Models Control Center](screenshots/8.jpg)   |
 

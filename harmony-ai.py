@@ -1,13 +1,21 @@
 import asyncio
+import json
 import logging
 import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 import time
 from typing import Optional
 from nicegui import app, ui
+try:
+    import psutil
+    HAS_PSUTIL = True
+except Exception:
+    HAS_PSUTIL = False
+    psutil = None
 
 # Self-hosted draw.io editor (offline, Apache-2.0). Served locally so the flow
 # board's "edit in draw.io" never depends on the cloud editor. The assets/drawio
@@ -505,6 +513,107 @@ def safe_update(el):
         el.update()
     except Exception:
         pass
+
+
+# ============================================================
+# TMUX WEB TERMINAL — donor niceai.py:302-303,8751-8902 (exact method)
+# Session 'harmony' on :7681 via ttyd. Button opens 4-grid (2x2 tiled).
+# ============================================================
+TTYD_PORT = 7681
+TMUX_SESSION = 'harmony'
+
+
+def kill_existing_ttyd():
+    try:
+        if HAS_PSUTIL:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    if proc.info['name'] == 'ttyd':
+                        cmdline = proc.info.get('cmdline', [])
+                        if '-p' in cmdline and str(TTYD_PORT) in cmdline:
+                            proc.kill()
+                except Exception:
+                    continue
+        else:
+            subprocess.run(['pkill', '-f', f'ttyd.*{TTYD_PORT}'],
+                           capture_output=True, timeout=5)
+    except Exception:
+        pass
+
+
+def ensure_tmux_session():
+    result = subprocess.run(['tmux', 'has-session', '-t', TMUX_SESSION],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if result.returncode != 0:
+        subprocess.run(['tmux', 'new-session', '-d', '-s', TMUX_SESSION,
+                        'bash', '--noprofile', '--norc',
+                        '-c', 'export PATH="$HOME/.local/bin:$PATH"; exec bash --noprofile --norc'])
+
+
+def ensure_terminal_session():
+    kill_existing_ttyd()
+    time.sleep(0.3)
+    ensure_tmux_session()
+    subprocess.Popen(
+        ['ttyd', '-i', '0.0.0.0', '-W', '-p', str(TTYD_PORT),
+         'tmux', 'attach-session', '-t', TMUX_SESSION],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    time.sleep(1.0)
+
+
+def _lan_ip():
+    ip = 'localhost'
+    try:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80)); ip = s.getsockname()[0]; s.close()
+    except Exception:
+        pass
+    return ip
+
+
+def _tmux_pane_count():
+    try:
+        r = subprocess.run(['tmux', 'list-panes', '-t', TMUX_SESSION],
+                           capture_output=True, text=True, timeout=3)
+        if r.returncode != 0:
+            return 0
+        return len([l for l in r.stdout.splitlines() if l.strip()])
+    except Exception:
+        return 0
+
+
+def tmux_layout_four():
+    """[4] 2x2 grid — donor niceai.py:8889. Never raises."""
+    try:
+        ensure_tmux_session()
+        for _ in range(3):
+            if _tmux_pane_count() >= 4:
+                break
+            subprocess.run(['tmux', 'split-window', '-t', TMUX_SESSION],
+                           capture_output=True, timeout=5)
+        subprocess.run(['tmux', 'select-layout', '-t', TMUX_SESSION,
+                        'tiled'], capture_output=True, timeout=5)
+        safe_notify('Terminal layout: [4] grid', type='positive')
+    except Exception as e:
+        safe_notify(f'Layout [4] failed: {e}', type='negative')
+
+
+def open_terminal_four():
+    """Ensure session + tile 2x2 + open ttyd tab. One click, 4 terminals."""
+    try:
+        ensure_terminal_session()
+    except Exception:
+        pass
+    try:
+        tmux_layout_four()
+    except Exception:
+        pass
+    ip = _lan_ip()
+    url = f"http://{ip}:{TTYD_PORT}"
+    safe_notify(f"Opening 4-terminal at {url} in a new tab", type="positive")
+    ui.run_javascript(f'window.open({json.dumps(url)}, "_blank")')
 
 
 try:
@@ -2060,7 +2169,7 @@ def get_tree_data(path: Path, depth: int = 0, max_depth: int = 3):
 # MAIN LAYOUT
 # ============================================================
 
-with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
+with ui.column().classes('w-full bg-transparent text-gray-100 p-4 gap-3'):
     
     # Define tree panel & toggle logic early so header can access it safely in scope
     tree_panel = ui.column().classes(
@@ -2110,11 +2219,12 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
             ui.notify(f'Info panel: {ex}', type='warning')
 
     # --------------------------------------------------------
-    # HEADER
+    # HEADER — flat blue-gray card, 3/4" tall, rounded 14px, wider than panels
     # --------------------------------------------------------
 
     with ui.row().classes(
-        'w-full justify-between items-center mb-2 px-1'
+        'w-full justify-between items-center px-4 py-3 '
+        'bg-gray-800 rounded-xl border border-gray-700'
     ):
         with ui.row().classes('items-center gap-2'):
 
@@ -2166,8 +2276,9 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
         ).tooltip('Toggle session info column')
 
     # Background-download thinline: Model Dwnl runs in a thread and survives
-    # closed dialogs/tabs, so its progress lives here, always visible.
-    dl_wrap = ui.column().classes('w-full gap-0 px-1')
+    # closed dialogs/tabs, so its progress lives here, always visible. Lives
+    # inside the header card so it doesn't need its own container.
+    dl_wrap = ui.column().classes('w-full gap-0 px-4')
     with dl_wrap:
         dl_lbl = ui.label('').classes('text-xs font-mono text-sky-300')
         dl_bar = ui.linear_progress(value=0.0, show_value=False).classes('w-full')
@@ -2256,7 +2367,7 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
     # --------------------------------------------------------
 
     with ui.row().classes(
-        'w-full flex-grow overflow-hidden min-h-0'
+        'w-full min-h-0 overflow-visible items-start'
     ):
 
 
@@ -2404,167 +2515,123 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                 ).classes('text-xs')
 
         # ====================================================
-        # MAIN CHAT / EXECUTION PANEL
+        # MAIN CHAT / EXECUTION PANEL — collapsible, donor niceai.py:10346
+        # was ui.column(); now ui.expansion('Harmony Chat', icon='chat',
+        # value=True) exactly like niceai's Chat expansion so collapse/expand
+        # animates the same (header arrow, slide, content stays in DOM).
         # ====================================================
 
-        with ui.column().classes(
-            'relative flex-grow min-w-0 min-h-0 h-full '
-            'flex flex-col gap-3 '
-            'bg-gray-800 p-4 rounded-lg '
-            'border border-gray-700 shadow-xl overflow-hidden'
-        ):
+        # v3: header ABOVE the blue panel (not inside it). Outer is transparent
+        # with no padding; the blue card lives on the inner content via CSS so
+        # collapse hides the whole tall panel and expand shows it full height.
+        # Header slot holds title + tmux + roles + checks (second row moved
+        # up here to reclaim vertical space; defs live before the header so
+        # on_change forward refs resolve at creation).
+        def _edit_dialog(target):
+            try:
+                _cur = read_text_capped(target, 100000)
+            except Exception:
+                _cur = ""
+            _twin = str(target)
+            if _twin.startswith('/home/joao/STORAGE/'):
+                _twin = _twin.replace('/home/joao/STORAGE/',
+                                      '/home/joao/REMOTE_HOME/STORAGE/', 1)
+            with ui.dialog() as _dlg, ui.card().classes('w-[92vw] max-w-6xl h-[88vh] p-4 gap-2 dialog-drag fill-card'):
+                with ui.row().classes('w-full items-center justify-between'):
+                    ui.label(f'✏️ {Path(target).name}').classes('text-base font-bold text-sky-300 drag-handle')
+                    ui.button(icon='close', on_click=_dlg.close).props('flat dense color=gray size=sm').tooltip('Close')
+                ui.input(value=_twin).props('readonly dense').classes('w-full text-xs').tooltip('Your local copy — open in your own editor')
+                with ui.row().classes('w-full no-wrap gap-2 flex-grow min-h-0'):
+                    with ui.column().classes('w-1/2 h-full min-h-0'):
+                        ui.label('Markdown (edit + Save)').classes(
+                            'text-xs font-semibold text-gray-400'
+                        )
+                        _ed = ui.textarea(value=_cur).classes(
+                            'w-full flex-grow fill-textarea font-mono text-sm'
+                        )
+                    with ui.column().classes('w-1/2 h-full min-h-0 overflow-auto'):
+                        ui.label('Preview (live)').classes(
+                            'text-xs font-semibold text-gray-400'
+                        )
+                        ui.markdown().bind_content_from(_ed, 'value')
+                def _save():
+                    try:
+                        Path(target).write_text(_ed.value, encoding='utf-8')
+                        ui.notify(f'Saved {Path(target).name}', type='positive')
+                        _dlg.close()
+                    except Exception as _ex:
+                        ui.notify(f'Save failed: {_ex}', type='negative')
+                with ui.row().classes('gap-2'):
+                    ui.button('Save', on_click=_save).props('color=primary')
+                    ui.button('Cancel', on_click=_dlg.close).props('flat')
+            _dlg.open()
 
-            # ------------------------------------------------
-            # CONTROLS
-            # ------------------------------------------------
+        def _open_in_editor(e):
+            if not e.value:
+                return
+            try:
+                edit_checkbox.set_value(False)
+            except Exception:
+                pass
+            target = (app_state.get("selected_file")
+                      or app_state.get("last_doc"))
+            if not target:
+                ui.notify('Nothing to edit — select a file or run !pdf first',
+                          type='warning')
+                return
+            _edit_dialog(target)
 
-            def _edit_dialog(target):
-                try:
-                    _cur = read_text_capped(target, 100000)
-                except Exception:
-                    _cur = ""
-                _twin = str(target)
-                if _twin.startswith('/home/joao/STORAGE/'):
-                    _twin = _twin.replace('/home/joao/STORAGE/',
-                                          '/home/joao/REMOTE_HOME/STORAGE/', 1)
-                with ui.dialog() as _dlg, ui.card().classes('w-[92vw] max-w-6xl h-[88vh] p-4 gap-2 dialog-drag fill-card'):
-                    with ui.row().classes('w-full items-center justify-between'):
-                        ui.label(f'✏️ {Path(target).name}').classes('text-base font-bold text-sky-300 drag-handle')
-                        ui.button(icon='close', on_click=_dlg.close).props('flat dense color=gray size=sm').tooltip('Close')
-                    ui.input(value=_twin).props('readonly dense').classes('w-full text-xs').tooltip('Your local copy — open in your own editor')
-                    with ui.row().classes('w-full no-wrap gap-2 flex-grow min-h-0'):
-                        with ui.column().classes('w-1/2 h-full min-h-0'):
-                            ui.label('Markdown (edit + Save)').classes(
-                                'text-xs font-semibold text-gray-400'
-                            )
-                            _ed = ui.textarea(value=_cur).classes(
-                                'w-full flex-grow fill-textarea font-mono text-sm'
-                            )
-                        with ui.column().classes('w-1/2 h-full min-h-0 overflow-auto'):
-                            ui.label('Preview (live)').classes(
-                                'text-xs font-semibold text-gray-400'
-                            )
-                            ui.markdown().bind_content_from(_ed, 'value')
-                    def _save():
-                        try:
-                            Path(target).write_text(_ed.value, encoding='utf-8')
-                            ui.notify(f'Saved {Path(target).name}', type='positive')
-                            _dlg.close()
-                        except Exception as _ex:
-                            ui.notify(f'Save failed: {_ex}', type='negative')
-                    with ui.row().classes('gap-2'):
-                        ui.button('Save', on_click=_save).props('color=primary')
-                        ui.button('Cancel', on_click=_dlg.close).props('flat')
-                _dlg.open()
+        chat_exp = ui.expansion(value=True).classes(
+            'relative flex-grow min-w-0 min-h-0 h-full w-full '
+            'nicegui-expansion datacard-chat-outer'
+        )
 
-            def _open_in_editor(e):
-                if not e.value:
-                    return
-                try:
-                    edit_checkbox.set_value(False)
-                except Exception:
-                    pass
-                target = (app_state.get("selected_file")
-                          or app_state.get("last_doc"))
-                if not target:
-                    ui.notify('Nothing to edit — select a file or run !pdf first',
-                              type='warning')
-                    return
-                _edit_dialog(target)
-
-            with ui.row().classes(
-                'gap-2 items-center'
-            ):
-
-                ui.label('Role:').classes(
-                    'text-xs font-semibold text-gray-400'
-                )
-
+        with chat_exp.add_slot('header'):
+            with ui.row().classes('w-full items-center justify-start gap-1 py-0 my-0 flex-wrap'):
+                ui.label('💬 Harmony Chat').classes('font-bold text-white')
+                ui.button(
+                    '🖥️ tmux ×4',
+                    on_click=lambda: open_terminal_four(),
+                ).props('size=sm dense').classes(
+                    'bg-slate-700 text-white font-bold py-0 my-0'
+                ).tooltip('Open tmux harmony session as 4 terminals (2x2 grid) in a new tab :7681')
+                ui.label('Role:').classes('text-xs font-semibold text-gray-400 ml-2')
                 role_buttons = {}
-
-                roles = [
-                    'brainstorm',
-                    'plan',
-                    'exec',
-                    'qc',
-                ]
-
+                roles = ['brainstorm', 'plan', 'exec', 'qc']
                 def set_role(role, notify=True):
                     app_state["role"] = role
                     try:
                         save_settings()
                     except Exception:
                         pass
-
                     for name, button in role_buttons.items():
                         button.style(
                             f"{_ROLE_BTN_BG[name]};{_BTN_TEXT};"
                             f"{_ACTIVE_FX if name == role else _INACTIVE_FX}"
                         )
-
                     if notify:
-                        ui.notify(
-                            f'Role switched to: {role.upper()}'
-                        )
-
+                        ui.notify(f'Role switched to: {role.upper()}')
                 for role in roles:
-
                     button = ui.button(
                         role.upper(),
                         on_click=lambda r=role: set_role(r)
-                    ).classes(
-                        'text-xs py-1 px-3'
-                    ).style(f"{_ROLE_BTN_BG[role]};{_BTN_TEXT};{_INACTIVE_FX}")
-
+                    ).classes('text-xs py-1 px-3').style(f"{_ROLE_BTN_BG[role]};{_BTN_TEXT};{_INACTIVE_FX}")
                     role_buttons[role] = button
-
                 set_role('brainstorm', notify=False)
-
-                wrap_checkbox = ui.checkbox(
-                    'Wrap output',
-                    value=True,
-                ).props(
-                    'dark'
-                ).classes(
-                    'text-xs text-emerald-400 font-semibold ml-2'
-                )
-                think_checkbox = ui.checkbox(
-                    '🧠 thinking',
-                    value=False,
-                ).props(
-                    'dark'
-                ).classes(
-                    'text-xs text-purple-400 font-semibold ml-2'
-                ).tooltip('Show the model reasoning block above answers')
+                wrap_checkbox = ui.checkbox('Wrap output', value=True).props('dark').classes('text-xs text-emerald-400 font-semibold ml-2')
+                think_checkbox = ui.checkbox('🧠 thinking', value=False).props('dark').classes('text-xs text-purple-400 font-semibold ml-2').tooltip('Show the model reasoning block above answers')
                 gt_checkbox = ui.checkbox(
                     '💭 great thoughts',
                     value=app_state.get('great_thoughts', True),
-                    on_change=lambda e: app_state.__setitem__(
-                        'great_thoughts', bool(e.value)),
-                ).props(
-                    'dark'
-                ).classes(
-                    'text-xs text-pink-400 font-semibold ml-2'
-                ).tooltip(
-                    'End answers with a creative open question (ethics/'
-                    'philosophy flourish). Off = just the facts, no question.'
-                )
-                debug_checkbox = ui.checkbox(
-                    'Debug Detail'
-                ).props(
-                    'dark'
-                ).classes(
-                    'text-xs text-yellow-400 font-semibold ml-2'
-                )
+                    on_change=lambda e: app_state.__setitem__('great_thoughts', bool(e.value)),
+                ).props('dark').classes('text-xs text-pink-400 font-semibold ml-2').tooltip('End answers with a creative open question. Off = facts only.')
+                debug_checkbox = ui.checkbox('Debug Detail').props('dark').classes('text-xs text-yellow-400 font-semibold ml-2')
                 edit_checkbox = ui.checkbox(
-                    '✏️ Edit file',
-                    value=False,
-                    on_change=_open_in_editor,
-                ).props(
-                    'dark'
-                ).classes(
-                    'text-xs text-sky-300 font-semibold ml-2'
-                ).tooltip('Edit selected / last doc (editor + preview)')
+                    '✏️ Edit file', value=False, on_change=_open_in_editor,
+                ).props('dark').classes('text-xs text-sky-300 font-semibold ml-2').tooltip('Edit selected / last doc (editor + preview)')
+
+        with chat_exp:
+            # Controls moved to header slot above (title row) to reclaim space.
 
             hat_label = ui.label().classes(
                 'text-xs font-mono font-semibold ml-2'
@@ -2602,10 +2669,13 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
             # NOTE 2026-09-10 strip-fix v2: was 'bg-black rounded-md ... border-b-0'
             # Top half of the joined black box. Bottom corners square, no bottom
             # border, sits above input with relative+z so its black covers the seam.
+            # NOTE: was 'border border-gray-800 border-b-0' — conflicting
+            # classes, 'border' won leaving a 1px gray bottom line. Explicit
+            # sides only: top + left + right, no bottom.
             with ui.scroll_area().classes(
                 'bg-black rounded-t-md w-full flex-grow '
-                'border border-gray-800 border-b-0 mb-0 pb-0 relative z-10'
-            ) as chat_scroll:
+                'border-x border-t border-gray-800 mb-0 pb-0 relative z-10'
+            ).style('box-shadow: 0 2px 0 #000;') as chat_scroll:
 
                 output_display = ui.markdown(
                     'Ready for input...'
@@ -2621,6 +2691,7 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                     'font-mono text-sm break-words'
                 )
                 streaming_md.visible = False
+
 
             def _agent_label():
                 role = app_state.get('role', 'brainstorm')
@@ -2732,7 +2803,9 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
             # Bottom half of the joined black box. Inline margin-top:-12px pulls
             # it up over the parent column's gap-3 (the 1/8" blue-gray strip).
             # Inline style used (not -mt-3 class) so no Tailwind conflict.
-            with ui.row().classes('w-full items-center gap-2 flex-shrink-0 bg-black rounded-b-md border border-gray-800 border-t-0 px-2 pb-2 pt-2 relative z-10').style('margin-top:-12px;'):
+            # NOTE: was 'border border-gray-800 border-t-0' — same conflict,
+            # 1px gray top line survived. Explicit sides only, no top.
+            with ui.row().classes('w-full items-center gap-2 flex-shrink-0 bg-black rounded-b-md border-x border-b border-gray-800 px-2 pb-2 pt-2 relative z-10').style('margin-top:-14px;box-shadow: 0 -2px 0 #000;'):
                 file_uploader = ui.upload(
                     on_upload=_handle_attach,
                     auto_upload=True,
@@ -2742,9 +2815,9 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                 prompt_input = ui.input(
                     placeholder='Ask anything…  ( / commands · ! shell · Enter sends )'
                 ).props(
-                    'dark rounded input-style="color: white;"'
+                    'dark rounded dense input-style="color: white;"'
                 ).classes(
-                    'flex-grow rounded-2xl shadow-lg px-4 py-3 text-base'
+                    'flex-grow rounded-2xl shadow-lg px-4 py-2 text-base'
                 ).style(
                     # NOTE 2026-09-10 strip-fix: was 'background: transparent;'
                     # Black input blends with the black terminal above.
@@ -2816,6 +2889,43 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                     logging.warning("suggest failed: %s", ex)
 
             prompt_input.on_value_change(lambda e: _update_sugg(e.value))
+
+            # Bottom-edge drag handle: resizes the chat above (220px-85vh).
+            # Lives below the input row so mic/send/flow stay clear and the
+            # chat->input seam stays joined (no strip).
+            # Drag-to-resize grab bar under the chat: hover shows ns-resize,
+            # mousedown + pull sets the scroll area height (220px–85vh).
+            chat_grab = ui.element('div').props('id="chat-resize-grab"').classes(
+                'w-full'
+            ).tooltip('Drag up/down to resize the chat')
+            ui.timer(0.5, lambda: ui.run_javascript('''
+(function () {
+  if (window._chatGrabWired) return;
+  var grab = document.getElementById('chat-resize-grab');
+  if (!grab) return;
+  function chatEl() { return document.querySelector('.datacard-chat-outer .q-scrollarea'); }
+  if (!chatEl()) return;
+  window._chatGrabWired = true;
+  grab.addEventListener('mousedown', function (e) {
+    e.preventDefault();
+    var el = chatEl(); if (!el) return;
+    var startY = e.clientY, startH = el.offsetHeight;
+    function move(ev) {
+      var h = startH + (ev.clientY - startY);
+      h = Math.max(220, Math.min(window.innerHeight * 0.85, h));
+      el.style.height = h + 'px';
+      el.style.flex = 'none';
+      el.style.maxHeight = 'none';
+    }
+    function stop() {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', stop);
+    }
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', stop);
+  });
+})();
+            '''), once=True)
 
 
 

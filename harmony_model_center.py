@@ -92,6 +92,43 @@ html, body { background: #0a0a0a !important; }
     background: #1f2937 !important;
     border: 1px solid #374151 !important;
 }
+/* Chat expansion v4 — same rounded card as bottom bar (datacard-control).
+   Outer IS the blue card: bg + border + 14px corners + padding, header inside
+   it like the bottom panel. Inner is transparent flex column filling height
+   (dynamic size), so no double card / no empty band. */
+.q-expansion-item.datacard-chat-outer {
+    background: #1f2937 !important;
+    border: 1px solid #374151 !important;
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,.5) !important;
+}
+.q-expansion-item.datacard-chat-outer > .q-expansion-item__container { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+/* Slim header bar — Quasar item defaults to ~48px tall, felt way too thick. */
+.q-expansion-item.datacard-chat-outer .q-item { padding-top: 2px !important; padding-bottom: 2px !important; min-height: 32px !important; }
+body .datacard-chat-outer .q-expansion-item__content { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+body .datacard-chat-outer .q-expansion-item__content .nicegui-content {
+    flex: 1 1 auto; display: flex; flex-direction: column;
+    gap: 12px; background: transparent !important;
+    border: none !important; padding: 8px 16px 8px 16px !important;
+    max-height: none !important; height: auto !important;
+    min-height: 0 !important; overflow: visible !important;
+}
+/* Dynamic like bottom: chat grows to 62vh then scrolls inside.
+   Custom grab bar (#chat-resize-grab) below does the drag — native CSS
+   resize does not survive Quasar's inner overflow wrappers. */
+body .datacard-chat-outer .nicegui-content .q-scrollarea { flex: 0 1 auto !important; min-height: 34vh !important; max-height: 85vh !important; overflow-x: hidden !important; }
+body .datacard-chat-outer .q-scrollarea .q-scrollarea__bar--h { display: none !important; }
+#chat-resize-grab { height: 6px !important; cursor: ns-resize !important; border-radius: 3px !important; background: #374151 !important; opacity: .55 !important; margin: 0 !important; touch-action: none !important; }
+#chat-resize-grab:hover { opacity: 1 !important; background: #4b5563 !important; }
+/* Chat scroll fills the tall blue box (flex reference restored by h-screen
+   outer); input pinned bottom. min-height:0 lets flex decide, no fixed vh. */
+body .datacard-chat-outer .nicegui-content .q-scrollarea { flex: 1 1 auto !important; min-height: 0 !important; }
 .q-card.datacard-localmodel,
 .q-card.datacard-hf,
 .q-card.datacard-vault {
