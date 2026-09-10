@@ -2599,9 +2599,12 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
             # OUTPUT TERMINAL
             # ------------------------------------------------
 
+            # NOTE 2026-09-10 strip-fix v2: was 'bg-black rounded-md ... border-b-0'
+            # Top half of the joined black box. Bottom corners square, no bottom
+            # border, sits above input with relative+z so its black covers the seam.
             with ui.scroll_area().classes(
-                'bg-black rounded-md w-full flex-grow '
-                'border border-gray-800 border-b-0'
+                'bg-black rounded-t-md w-full flex-grow '
+                'border border-gray-800 border-b-0 mb-0 pb-0 relative z-10'
             ) as chat_scroll:
 
                 output_display = ui.markdown(
@@ -2691,10 +2694,14 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
             # with a shadow) so it stays usable in fullscreen where the input
             # hugs the bottom edge and there is no room below. No border — the
             # top border read as a thin horizontal bar when it opens.
+            # NOTE 2026-09-10 strip-fix: was 'w-full gap-1 absolute' + bottom:72px only.
+            # Kept floating (absolute) + transparent + zero padding so the empty
+            # column is 0px and never paints a thin bar above the input.
             sugg_col = ui.column().classes(
-                'w-full gap-1 absolute z-10'
+                'w-full gap-1 absolute z-10 p-0 m-0 bg-transparent border-0'
             ).style(
                 'bottom: 72px; left: 16px; right: 16px;'
+                'background:transparent;border:none;padding:0;margin:0;'
             )
             sugg_col.visible = False
 
@@ -2721,7 +2728,11 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                 flow_dialog.open()
                 await render_flow_board()
 
-            with ui.row().classes('w-full items-center gap-2 mt-1 flex-shrink-0'):
+            # NOTE 2026-09-10 strip-fix v2: was 'w-full items-center gap-2 mt-1'.
+            # Bottom half of the joined black box. Inline margin-top:-12px pulls
+            # it up over the parent column's gap-3 (the 1/8" blue-gray strip).
+            # Inline style used (not -mt-3 class) so no Tailwind conflict.
+            with ui.row().classes('w-full items-center gap-2 flex-shrink-0 bg-black rounded-b-md border border-gray-800 border-t-0 px-2 pb-2 pt-2 relative z-10').style('margin-top:-12px;'):
                 file_uploader = ui.upload(
                     on_upload=_handle_attach,
                     auto_upload=True,
@@ -2735,7 +2746,9 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                 ).classes(
                     'flex-grow rounded-2xl shadow-lg px-4 py-3 text-base'
                 ).style(
-                    'background: transparent; '
+                    # NOTE 2026-09-10 strip-fix: was 'background: transparent;'
+                    # Black input blends with the black terminal above.
+                    'background: #000000; '
                     'border: 1px solid rgba(129, 140, 248, 0.35);'
                 )
 

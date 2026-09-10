@@ -396,6 +396,8 @@ not write these building blocks — I just merely assembled them:
   rendered by Mermaid (no separate dependency).
 - **[draw.io](https://github.com/jgraph/drawio)** (Apache-2.0) — the offline
   flow editor.
+- **Muse Spark 1.3 free (via Kilo)** — special mention :) fixed the stubborn
+  input-box seam that bugged me for 4 days, and helped polish the UI.
 - **The Python community and every coder I forgot to mention** who contributed to the libraries, role prompts, and examples this app leans on — including DeepSeek that was very instrumental to make this happen (v4 pro, almost without skipping a beat) and yes, I used also a bit chatgpt, gemini, and copilot, for the skills they are good at,  and tx for all other open models that finally made quality local assistance possible, so I just tried to extend the usability for regular joe, since many of us were raised with hard hand workd, and just type w 3 or 4 fingers .. At the same time, I needed more power at command line, and Aichat came a bit ahead of Aider and others, as the right tool for what I was looking for.  Xterm js gave it that extra push , to make old home pcs great again! :) 
 
 Ps Any mistakes in the glue are mine, not theirs,  and I really could not tell you much how to torubleshoot, I call myself the copy and paste programmer .  I just like to solve problems , and will do what I can to improve this further, but don't expect fast replies. 
