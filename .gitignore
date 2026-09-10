@@ -20,3 +20,5 @@ backup/
 tts/
 node_modules/
 .DS_Store
+certs/
+.first_run_done

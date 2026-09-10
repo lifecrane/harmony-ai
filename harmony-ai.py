@@ -279,6 +279,22 @@ except Exception as _vault_err:
     HAS_VAULT = False
     _vault = None
 
+try:
+    import harmony_model_center as _hmc
+    HAS_HMC = True
+except Exception as _hmc_err:
+    logging.warning("model center unavailable: %s", _hmc_err)
+    HAS_HMC = False
+    _hmc = None
+
+try:
+    import harmony_audio as _haudio
+    HAS_HAUDIO = True
+except Exception as _haudio_err:
+    logging.warning("audio module unavailable: %s", _haudio_err)
+    HAS_HAUDIO = False
+    _haudio = None
+
 # ============================================================
 # HARMONY AI TERMINAL
 # ============================================================
@@ -368,10 +384,10 @@ _OPENROUTER_HELP = (
     '1. Sign up free and create a key at '
     '<b style="color:#a78bfa">https://openrouter.ai/keys</b> '
     '(no card needed for the FREE models).<br>'
-    '2. In this panel: ⚙️ <b>Control Center → Vault</b> → Create + Unlock.<br>'
+    '2. In this panel: ⚙️ <b>Models Control Center → Vault card</b> → Create + Unlock.<br>'
     '3. <b>Add service</b>: name <b>openrouter</b>, paste the key, Base URL '
     '<b>https://openrouter.ai/api/v1</b> (blank is fine — it is a default).<br>'
-    '4. ⚙️ <b>Sys &amp; Cld Selection → ☁️ Cloud</b>: provider '
+    '4. ⚙️ <b>Models Control Center → Local card → ☁️ Cloud</b>: provider '
     '<b>openrouter</b>, model id e.g. <b>liquid/lfm-2.5-2.6b:free</b> → '
     '<b>Use cloud</b>.<br>'
     'Free model ids live at <b>https://openrouter.ai/models</b> '
@@ -442,21 +458,14 @@ def _first_run_pull(status_lbl, btn_pull):
 
 
 def _first_run_welcome():
-    """Open the welcome dialog on the first browser visit when the 2 default
-    models are missing. The installer normally pulls them; this is the
-    in-browser fallback so a fresh clone never lands on an empty Ollama."""
+    """Open the welcome dialog on the FIRST browser visit (no `.first_run_done`
+    marker yet). Always shows once — even if models are already present — so a
+    fresh clone always greets the user with model + cloud guidance."""
     try:
         if FIRST_RUN_MARKER.is_file():
             return
-        missing = _missing_default_models()
     except Exception:
-        missing = list(DEFAULT_MODELS)
-    if not missing:
-        try:
-            FIRST_RUN_MARKER.write_text('done', encoding='utf-8')
-        except Exception:
-            pass
-        return
+        pass
 
     dlg = ui.dialog()
     with dlg, ui.card().classes('p-4 gap-2 min-w-[32rem] max-w-[94vw] dialog-drag'):
@@ -492,6 +501,18 @@ def safe_update(el):
         el.update()
     except Exception:
         pass
+
+
+try:
+    if HAS_HMC:
+        _hmc.inject_harmony_deps(
+            {'mc': _mc, 'vault': _vault, 'safe_notify': safe_notify,
+             'safe_update': safe_update, 'app_state': app_state,
+             'base_dir': str(BASE_DIR), 'save_settings': save_settings,
+             'has_mc': HAS_MC, 'has_vault': HAS_VAULT})
+        _hmc.apply_theme()
+except Exception as _hmc_inj_err:
+    logging.warning("model center inject failed: %s", _hmc_inj_err)
 
 
 # ============================================================
@@ -1179,7 +1200,7 @@ async def restart_panel():
 chat_messages = []  # list[{'role': 'user'|'assistant', 'text': str}]
 
 # Chat log (optional, default on): every turn shown in the terminal is appended
-# to History/chat.log when the "Keep chat logs" Control Center checkbox is set.
+# to History/chat.log when the "Keep chat logs" Models Control Center checkbox is set.
 # _chat_log_written tracks how many turns we have already flushed so re-renders
 # (and the streaming tail) never duplicate entries.
 _chat_log_written = 0
@@ -2520,19 +2541,84 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
             # hugs the bottom edge and there is no room below. No border — the
             # top border read as a thin horizontal bar when it opens.
             sugg_col = ui.column().classes(
-                'w-full gap-1 flex-shrink-0 mb-1 '
-                'bg-[#0d1117] rounded-lg shadow-lg p-1'
+                'w-full gap-1 absolute z-10'
+            ).style(
+                'bottom: 72px; left: 16px; right: 16px;'
             )
             sugg_col.visible = False
 
-            prompt_input = ui.input(
-                placeholder='Ask anything…  ( / commands · ! shell · Enter sends )'
-            ).props(
-                'dark rounded input-style="color: white;"'
-            ).classes(
-                'w-full bg-[#0d1117] rounded-2xl mt-1 flex-shrink-0 '
-                'border-l-2 border-l-emerald-500 shadow-lg px-4 py-3 text-base'
-            )
+            async def _handle_attach(e):
+                # Paperclip: save the upload to History/uploads and attach it as
+                # the selected-file context (same path the file tree uses). The
+                # existing -f attachment / size-cap logic then picks it up.
+                try:
+                    _dest_dir = BASE_DIR / 'History' / 'uploads'
+                    _dest_dir.mkdir(parents=True, exist_ok=True)
+                    _name = Path(e.file.name or 'attachment.txt').name
+                    _dest = _dest_dir / _name
+                    await e.file.save(_dest)
+                    app_state['selected_file'] = str(_dest)
+                    try:
+                        selected_file_label.text = f'Context: {_name}'
+                    except Exception:
+                        pass
+                    safe_notify(f'Attached: {_name}')
+                except Exception as ex:
+                    safe_notify(f'Attach failed: {ex}', type='negative')
+
+            async def _open_flow():
+                flow_dialog.open()
+                await render_flow_board()
+
+            with ui.row().classes('w-full items-center gap-2 mt-1 flex-shrink-0'):
+                file_uploader = ui.upload(
+                    on_upload=_handle_attach,
+                    auto_upload=True,
+                    max_files=1,
+                ).classes('hidden')
+
+                prompt_input = ui.input(
+                    placeholder='Ask anything…  ( / commands · ! shell · Enter sends )'
+                ).props(
+                    'dark rounded input-style="color: white;"'
+                ).classes(
+                    'flex-grow rounded-2xl shadow-lg px-4 py-3 text-base'
+                ).style(
+                    'background: transparent; '
+                    'border: 1px solid rgba(129, 140, 248, 0.35);'
+                )
+
+                if HAS_HAUDIO:
+                    _haudio.inject({'prompt_input': prompt_input,
+                                    'safe_notify': safe_notify,
+                                    'send': (lambda: run_aichat())})
+                    _haudio.warm_stt_on_boot()
+
+                # Icons live INSIDE the input bar (no separate background
+                # behind them): paperclip on the left, mic/send/flow on the right.
+                with prompt_input.add_slot('prepend'):
+                    ui.button(
+                        icon='attach_file',
+                        on_click=lambda: file_uploader.run_method('pickFiles'),
+                    ).props('flat round dense').classes(
+                        'text-gray-400').tooltip('Attach a file (paperclip)')
+
+                with prompt_input.add_slot('append'):
+                    if HAS_HAUDIO:
+                        _haudio.build_mic()
+
+                    ui.button(
+                        icon='send',
+                        on_click=lambda: run_aichat(),
+                    ).props('flat round dense color=blue').classes(
+                        'text-blue-300').tooltip('Send')
+
+                    ui.button(
+                        '📊 Flow',
+                        on_click=lambda: _open_flow(),
+                    ).props('flat dense').classes(
+                        'text-emerald-300').tooltip('Open flow board (flow.md)')
+
             prompt_input.on('keydown.enter', lambda e: run_aichat())
 
             def _set_cmd(cmd):
@@ -3231,41 +3317,6 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
 
                     app_state["process"] = None
 
-            # ------------------------------------------------
-            # ACTION BUTTONS
-            # ------------------------------------------------
-
-            with ui.row().classes(
-                'gap-3 w-full justify-between '
-                'items-center mt-2 flex-shrink-0'
-            ):
-
-                execute_button = ui.button(
-                    'Execute via aichat',
-                    on_click=run_aichat
-                ).classes(
-                    'bg-blue-600 hover:bg-blue-500 '
-                    'text-white font-medium px-6'
-                )
-
-                async def _open_flow():
-                    flow_dialog.open()
-                    await render_flow_board()
-
-                ui.button(
-                    '📊 Flow',
-                    on_click=_open_flow
-                ).classes(
-                    'bg-emerald-700 text-white font-medium px-4'
-                ).tooltip('Open flow board (flow.md)')
-
-                ui.button(
-                    '⚙️ Control Center',
-                    on_click=lambda: _open_cc_menu()
-                ).classes(
-                    'bg-gray-700 text-gray-200 font-medium px-4'
-                )
-
         # ====================================================
         # INFO PANEL (session info column, right side)
         # ====================================================
@@ -3343,7 +3394,7 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                             f"first-token {ttft} · total {lp['total']:.1f}s"
                         )
                     else:
-                        info_ping_label.set_text('Ping: (run ⚡ Ping in Control Center)')
+                        info_ping_label.set_text('Ping: (run ⚡ Ping in Models Control Center)')
                 except Exception:
                     info_ping_label.set_text('')
                 info_project_label.set_text(f'Project: {proj}')
@@ -3368,715 +3419,54 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
 
 
 # ============================================================
-# MODELS CONTROL CENTER (thin UI — engine lives in aichat_model_controller)
+# MODELS CONTROL CENTER — collapsible bar at the bottom (3 cards
+# from harmony_model_center.py: Local Default Model / HF Downloader /
+# Credentials Vault; donor layout niceai.py:17326 expansion). Rendered
+# OUTSIDE the h-screen column so the fixed-height chat stays put and the
+# bar expands downward (the page scrolls), matching niceai.
 # ============================================================
-
-_WHITE_BTN = 'background:#ffffff!important;color:#333333;font-weight:normal'
-
-
-def _white_stub(name):
-    """Unwired button: white, announces itself, no crash."""
-    return ui.button(name, on_click=lambda: ui.notify(f'{name}: not wired yet', type='warning')).style(_WHITE_BTN)
-
-
-def _mc_guard():
-    if not HAS_MC:
-        ui.notify('Model controller module missing', type='negative')
-        return False
-    return True
-
-
-def _toggle_chat_logs(e):
-    """Keep chat logs checkbox: persist the choice so a restart remembers it."""
-    app_state['keep_chat_logs'] = bool(e.value)
+if HAS_HMC:
+    # Re-inject now that the UI callbacks (_refresh_model_status /
+    # _refresh_info) exist, so the cards can update the header + info
+    # panel after load/ping.
     try:
-        save_settings()
+        _hmc.inject_harmony_deps({
+            'mc': _mc, 'vault': _vault, 'safe_notify': safe_notify,
+            'safe_update': safe_update, 'app_state': app_state,
+            'base_dir': str(BASE_DIR), 'save_settings': save_settings,
+            'has_mc': HAS_MC, 'has_vault': HAS_VAULT,
+            'refresh_model_status': _refresh_model_status,
+            'refresh_info': _refresh_info,
+        })
     except Exception:
         pass
-
-
-def _open_cc_menu():
-    with ui.dialog() as dlg, ui.card().classes('p-4 gap-2 min-w-72 dialog-drag'):
-        ui.label('⚙️ Control Center').classes('text-lg font-bold text-emerald-400 drag-handle')
-        ui.checkbox(
-            'Keep chat logs',
-            value=bool(app_state.get('keep_chat_logs', True)),
-            on_change=_toggle_chat_logs,
-        ).props('dark').classes(
-            'text-xs text-emerald-400 font-semibold'
-        ).tooltip('Append every turn to History/chat.log')
-        ui.button('Sys & Cld Selection', on_click=lambda: (dlg.close(), _cc_models())).classes('w-full')
-        ui.button('Model Dwnl', on_click=lambda: (dlg.close(), _cc_download())).classes('w-full')
-        ui.button('Diagnostics', on_click=lambda: (dlg.close(), _cc_diag())).classes('w-full')
-        ui.button('Vault', on_click=lambda: (dlg.close(), _cc_vault())).classes('w-full')
-    dlg.open()
-
-
-# --- 1. Sys & Cld Selection -------------------------------------------------
-
-def _cc_models():
-    if not _mc_guard():
-        return
-    with ui.dialog() as dlg, ui.card().classes('p-4 gap-2 min-w-96 dialog-drag'):
-        ui.label('Sys & Cld Selection').classes('text-lg font-bold text-emerald-400 drag-handle')
-        ui.html(
-            'Local: drop a <b>.gguf</b> into the <b>Models/</b> folder, then Refresh '
-            'to auto-import it to Ollama. Cloud: add an OpenRouter API key in '
-            '<b>Vault</b> (free key at <b>openrouter.ai/keys</b>) to use their '
-            'FREE and paid models.'
-        ).classes('text-[10px] text-gray-400 leading-snug')
-        loaded_lbl = ui.label('').classes('text-xs text-yellow-400 font-mono')
-        ping_lbl = ui.label('').classes('text-xs text-sky-300 font-mono')
-        prog_lbl = ui.label('').classes('text-xs font-mono text-yellow-300')
-        prog_bar = ui.linear_progress(show_value=False).classes('w-full')
-        prog_bar.visible = False
-        sel = ui.select([], label='Ollama model').classes('w-full')
-        tag_row = ui.row().classes('gap-1 flex-wrap')
-        try:
-            sel.on_value_change(lambda e: _render_tag_chips())
-        except Exception:
-            pass
-        ui.label('☁️ Cloud (vault key + lock — rest untouched)').classes(
-            'text-xs text-purple-300 font-bold mt-1')
-        cloud_lbl = ui.label('').classes('text-[11px] text-purple-200 font-mono')
-        with ui.row().classes('gap-2 w-full'):
-            prov_in = ui.input('Provider', value='openrouter').classes('flex-1')
-            url_in = ui.input('Base URL (blank = known default)',
-                              placeholder='https://openrouter.ai/api/v1').classes('flex-2')
-        cloud_in = ui.input(
-            'Cloud model id (e.g. liquid/lfm-2.5-2.6b:free)').classes('w-full')
-        try:
-            _pref_path = os.path.join(str(BASE_DIR), 'Models', 'preferred_cloud.txt')
-            with open(_pref_path, 'r', encoding='utf-8') as _pf:
-                _pref_lines = [l.strip() for l in _pf.read().splitlines() if l.strip()]
-            if _pref_lines:
-                cloud_in.value = _pref_lines[0]
-        except Exception:
-            pass
-
-        # Known OpenAI-compatible endpoints — blank URL resolves from here so
-        # kids only type provider + model. Anything else: paste its base URL.
-        _KNOWN_CLOUD_BASE = {
-            'openrouter': 'https://openrouter.ai/api/v1',
-            'deepseek': 'https://api.deepseek.com/v1',
-        }
-
-        # One-line help so a fresh user can get a key + a free model id
-        # without leaving the panel (mirrored in the first-run welcome).
-        ui.html(
-            'No key yet? Get a free one at <b>openrouter.ai/keys</b>, then add it '
-            'in <b>Vault</b> (service <b>openrouter</b>). Free model ids are at '
-            '<b>openrouter.ai/models</b> — try <b>liquid/lfm-2.5-2.6b:free</b>.'
-        ).classes('text-[11px] text-purple-300/70 leading-snug')
-
-        def _cloud_status():
-            try:
-                active = _mc.get_aichat_active_model()
-            except Exception:
-                active = ''
-            cloud_lbl.text = f"active chat model: {active or '(unknown)'}"
-
-        def _use_cloud():
-            prov = (prov_in.value or '').strip().lower() or 'openrouter'
-            mid = (cloud_in.value or '').strip()
-            if mid.lower().startswith(prov + ':'):
-                mid = mid[len(prov) + 1:].strip()
-            if not mid:
-                ui.notify('Type a cloud model id first', type='warning')
-                return
-            base = (url_in.value or '').strip() or _KNOWN_CLOUD_BASE.get(prov, '')
-            if not base:
-                ui.notify(f'Unknown provider — paste its Base URL too',
-                          type='warning')
-                return
-            if not HAS_VAULT or _vault is None:
-                ui.notify('Vault module missing', type='negative')
-                return
-            try:
-                unlocked = _vault.is_unlocked()
-            except Exception:
-                unlocked = False
-            if not unlocked:
-                ui.notify('Unlock the Vault first (Vault button: passphrase)',
-                          type='warning')
-                return
-            try:
-                key = _vault.get(prov, 'api_key')
-            except Exception as ex:
-                ui.notify(f'Vault read failed: {ex}', type='negative')
-                return
-            if not key:
-                ui.notify(f'No key for {prov} in Vault — Vault button → '
-                          f'Add service → lock it again after',
-                          type='warning')
-                return
-            ok, msg = _mc.set_aichat_cloud_model(prov, mid, key, base)
-            safe_notify(msg, type='positive' if ok else 'negative', timeout=8000)
-            _cloud_status()
-
-        def _back_to_local():
-            name = sel.value
-            if not name or name.startswith('(none'):
-                ui.notify('Pick a local model first', type='warning')
-                return
-            if '(gguf-only)' in name:
-                ui.notify('Import the GGUF first', type='warning')
-                return
-            try:
-                ok, msg = _mc.set_aichat_model(name)
-            except Exception as ex:
-                ui.notify(f'config update failed: {ex}', type='negative')
-                return
-            safe_notify(msg, type='positive' if ok else 'warning', timeout=8000)
-            _cloud_status()
-
-        def _show_progress(text=''):
-            try:
-                prog_bar.visible = True
-                if text:
-                    prog_lbl.text = text
-                safe_update(prog_lbl)
-                safe_update(prog_bar)
-            except Exception:
-                pass
-
-        def _hide_progress():
-            try:
-                prog_bar.visible = False
-                prog_lbl.text = ''
-                safe_update(prog_lbl)
-                safe_update(prog_bar)
-            except Exception:
-                pass
-
-        gguf_paths = {}
-
-        def _render_tag_chips():
-            # Usability tags for the selected model (label-only badges from
-            # local_tags.py — same pattern as the cloud ⭐/· free badges).
-            # Toggles persist to Models/local_tags.json.
-            tag_row.clear()
-            try:
-                import local_tags as _lt
-            except Exception:
-                return
-            cur = sel.value
-            if not cur or cur.startswith('(none'):
-                return
-            clean = _mc._clean(cur) if hasattr(_mc, '_clean') else cur
-            if '(gguf-only)' in (cur or ''):
-                return
-            cur_tags = _lt.get_tags(clean)
-            with tag_row:
-                ui.label('tags:').classes('text-[10px] text-gray-500 self-center')
-                for _t in _lt.ALLOWED_TAGS:
-                    _on = _t in cur_tags
-                    ui.button(
-                        f"✓ {_t}" if _on else _t,
-                        on_click=lambda t=_t: (_lt.toggle_tag(clean, t), _refresh()),
-                    ).props(('unelevated dense size=xs color=positive' if _on
-                              else 'outline dense size=xs color=grey')
-                    ).classes('text-[10px]').tooltip(
-                        f"{'Remove' if _on else 'Add'} '{_t}' tag")
-
-        def _refresh():
-            def _sort_opt(lbl):
-                # default/keeper first, drop last — via local_tags, fallback alpha.
-                try:
-                    import local_tags as _lt
-                    return _lt.sort_key_for_label(lbl)
-                except Exception:
-                    return (1, (lbl or '').lower())
-            models = _mc.ollama_models()
-            tags = [m['name'] for m in models]
-            g = _mc.scan_gguf_folder(str(BASE_DIR))
-            gguf_paths.clear()
-            for n, p in g.items():
-                if not _mc.gguf_is_imported(n, models):
-                    gguf_paths[n] = p
-            opts = sorted((_mc.tag_local(t) for t in tags), key=_sort_opt)
-            opts += sorted((_mc.tag_local(f'{n} (gguf-only)') for n in gguf_paths),
-                           key=_sort_opt)
-            # Preserve the selection across refreshes by CLEAN name (labels
-            # now carry ` · tag` suffixes, so raw-value compare would strand
-            # Unload/Ping/Tune on "Pick a model first").
-            def _key(v):
-                try:
-                    return _mc._clean(v) if hasattr(_mc, '_clean') else (v or '')
-                except Exception:
-                    return v or ''
-            _keep_clean = _key(sel.value) if sel.value else None
-            sel.set_options(opts or ['(none — is Ollama running?)'])
-            if _keep_clean:
-                for _o in opts:
-                    if _key(_o) == _keep_clean:
-                        sel.value = _o
-                        break
-            sel.update()
-            _render_tag_chips()
-            _cloud_status()
-            loaded = _mc.loaded_names()
-            loaded_lbl.text = f"in RAM: {', '.join(loaded) if loaded else '(none)'}"
-            ui.notify('Model list refreshed')
-
-        def _gguf_key_from_value(v):
-            if not v or '(gguf-only)' not in v:
-                return None
-            try:
-                base = _mc._clean(v) if hasattr(_mc, '_clean') else v
-            except Exception:
-                base = v
-            return base.replace('[LCL] ', '').replace(' (gguf-only)', '').strip()
-
-        def _prompt_import(gguf_path):
-            stem = Path(gguf_path).stem
-            suggested = (re.sub(r'[^a-z0-9]+', '-', stem.lower()).strip('-')
-                         or 'imported-model')
-            with ui.dialog() as ndlg, ui.card().classes('p-4 gap-2 min-w-80 dialog-drag'):
-                ui.label(f'Import {Path(gguf_path).name}').classes(
-                    'font-bold text-emerald-400 drag-handle')
-                ui.label('No Ollama entry yet — give it a name:').classes(
-                    'text-xs text-gray-400')
-                name_in = ui.input('Model name', value=suggested).classes('w-full')
-                ui.label(f'GGUF: {gguf_path}').classes(
-                    'text-[10px] font-mono text-gray-500 break-all')
-                import threading
-
-                def _go():
-                    mname = name_in.value.strip() or suggested
-                    ndlg.close()
-                    app_state['loading_model'] = mname
-                    _refresh_model_status()
-
-                    def _run():
-                        _show_progress(f'importing {mname}...')
-
-                        def _line(txt):
-                            _show_progress(txt)
-
-                        ok = _mc.import_single_model(mname, gguf_path, on_line=_line)
-                        if ok:
-                            _show_progress(f'imported {mname} — loading...')
-                            _mc.load_model(mname, timeout=900, base_dir=str(BASE_DIR))
-                            app_state['loading_model'] = None
-                            _refresh_model_status()
-                            _hide_progress()
-                            try:
-                                _mc.set_aichat_model(mname)
-                            except Exception:
-                                pass
-                        else:
-                            app_state['loading_model'] = None
-                            _refresh_model_status()
-                            _hide_progress()
-                            safe_notify(f'Import failed for {mname}',
-                                        type='negative', timeout=8000)
-                        try:
-                            if ok:
-                                try:
-                                    sel.value = _mc.tag_local(mname)
-                                except Exception:
-                                    pass
-                            _refresh()
-                        except Exception:
-                            pass
-                    threading.Thread(target=_run, daemon=True).start()
-
-                ui.button('Import + Load', on_click=_go).classes('bg-emerald-600 text-white')
-                ui.button('Cancel', on_click=ndlg.close).props('flat')
-            ndlg.open()
-
-        def _load_launch():
-            name = sel.value
-            if not name or name.startswith('(none'):
-                ui.notify('Pick a model first', type='warning')
-                return
-            gguf_key = _gguf_key_from_value(sel.value)
-            if gguf_key and gguf_key in gguf_paths:
-                _prompt_import(gguf_paths[gguf_key])
-                return
-            ui.notify(f'Loading {name} — slow models take minutes...', type='info')
-            app_state['loading_model'] = name
-            _refresh_model_status()
-            import threading
-
-            def _go():
-                _show_progress(f'loading {name}...')
-                ok, msg = _mc.load_model(name, timeout=900, base_dir=str(BASE_DIR))
-                app_state['loading_model'] = None
-                _refresh_model_status()
-                _hide_progress()
-                safe_notify(msg, type='positive' if ok else 'negative', timeout=10000)
-                # Point the chat CLI at this model too, so Load & Launch
-                # actually changes what aichat uses (not just what's in RAM).
-                try:
-                    ok2, msg2 = _mc.set_aichat_model(name)
-                    safe_notify(msg2, type='positive' if ok2 else 'warning', timeout=8000)
-                except Exception as ex:
-                    safe_notify(f'aichat config update failed: {ex}', type='warning', timeout=8000)
-                try:
-                    loaded_lbl.text = f"in RAM: {', '.join(_mc.loaded_names()) or '(none)'}"
-                except Exception:
-                    pass
-            threading.Thread(target=_go, daemon=True).start()
-
-        def _ping():
-            name = sel.value
-            if not name or name.startswith('(none'):
-                ui.notify('Pick a model first', type='warning')
-                return
-            ping_lbl.text = f'pinging {name} (real workload)...'
-            import threading
-
-            def _go():
-                ok, rep = _mc.ping_model(name)
-                if ok:
-                    _mc.log_ping(rep, str(BASE_DIR))
-                    ttft = f"{rep['ttft']:.1f}s" if rep.get('ttft') else 'n/a'
-                    state = '⚡ warm' if rep.get('warm') else '⏳ cold'
-                    ping_lbl.text = (
-                        f"{state} {rep['model']} [{rep.get('family', '?')}] — "
-                        f"first token {ttft} · total {rep['total']:.1f}s"
-                    )
-                    ui.notify(
-                        f"{state} {rep['model']} first token {ttft}, total {rep['total']:.1f}s",
-                        type='positive', timeout=8000)
-                    # Keep the info panel's ping line fresh.
-                    try:
-                        app_state['last_ping'] = rep
-                        _refresh_info()
-                    except Exception:
-                        pass
-                else:
-                    ping_lbl.text = f"ping failed: {rep.get('error', '?')}"
-                    ui.notify(f"Ping failed: {rep.get('error', '?')}",
-                              type='negative', timeout=8000)
-            threading.Thread(target=_go, daemon=True).start()
-
-        def _unload():
-            name = sel.value
-            if not name or name.startswith('(none'):
-                # Single-model box: fall back to whatever is actually resident.
-                try:
-                    _res = _mc.loaded_names()
-                except Exception:
-                    _res = []
-                if _res:
-                    name = _res[0]
-                else:
-                    ui.notify('Pick a model first', type='warning')
-                    return
-            _mc.unload_model(name)
-            loaded_lbl.text = f"in RAM: {', '.join(_mc.loaded_names()) or '(none)'}"
-            ui.notify(f'Unloaded {name}')
-
-        def _tune():
-            name = sel.value
-            if not name or name.startswith('(none'):
-                ui.notify('Pick a model first', type='warning')
-                return
-            cur = _mc.get_tuning(str(BASE_DIR), name)
-            with ui.dialog() as tdlg, ui.card().classes('p-4 gap-2 min-w-72 dialog-drag'):
-                ui.label(f'Tune {name}').classes('font-bold text-emerald-400 drag-handle')
-                ctx_in = ui.input('num_ctx', value=str(cur.get('num_ctx', ''))).classes('w-full')
-                thr_in = ui.input('num_thread', value=str(cur.get('num_thread', ''))).classes('w-full')
-                tmp_in = ui.input('temperature', value=str(cur.get('temperature', ''))).classes('w-full')
-
-                def _save():
-                    def _num(v):
-                        try:
-                            return float(v) if v not in (None, '') else None
-                        except Exception:
-                            return None
-                    ok = _mc.set_tuning(str(BASE_DIR), name, {
-                        'num_ctx': _num(ctx_in.value),
-                        'num_thread': _num(thr_in.value),
-                        'temperature': _num(tmp_in.value)})
-                    ui.notify('Tuning saved (applies at next load)' if ok else 'Save failed',
-                              type='positive' if ok else 'negative')
-                    tdlg.close()
-                ui.button('Save', on_click=_save).classes('bg-emerald-600 text-white')
-            tdlg.open()
-
-        def _delete_traces():
-            name = sel.value
-            if not name or name.startswith('(none'):
-                ui.notify('Pick a model first', type='warning')
-                return
-            with ui.dialog() as cdlg, ui.card().classes('p-4 gap-2 dialog-drag'):
-                ui.label(f"Delete ALL traces of {name}?").classes('font-bold text-red-400 drag-handle')
-                ui.label('Removes: Ollama entry + blobs, GGUF file, Modelfile, tuning. Cannot be undone.').classes('text-xs')
-                ui.button('YES, delete everything',
-                          on_click=lambda: (cdlg.close(),
-                                            ui.notify(_mc.delete_model_all_traces(name, str(BASE_DIR))[1],
-                                                      timeout=8000),
-                                            _refresh())).props('color=red')
-                ui.button('Cancel', on_click=cdlg.close)
-            cdlg.open()
-
-        with ui.row().classes('gap-2 flex-wrap'):
-            ui.button('Use cloud ☁️', on_click=_use_cloud).classes('bg-purple-600 text-white')
-            ui.button('Back to local', on_click=_back_to_local).classes('bg-gray-600 text-white')
-        with ui.row().classes('gap-2 flex-wrap'):
-            ui.button('Refresh models', on_click=_refresh).classes('bg-emerald-600 text-white')
-            ui.button('Load & Launch', on_click=_load_launch).classes('bg-blue-600 text-white')
-            ui.button('⚡ Ping', on_click=_ping).classes('bg-sky-600 text-white')
-            ui.button('Unload', on_click=_unload).classes('bg-gray-600 text-white')
-            ui.button('Tune', on_click=_tune).classes('bg-purple-600 text-white')
-            ui.button('Delete all traces', on_click=_delete_traces).props('color=red')
-            _white_stub('Team Check')
-            _white_stub('Fastest Cloud')
-        ui.button('Close', on_click=dlg.close).props('flat')
-    _refresh()
-    dlg.open()
-
-
-# --- 2. Model Download (HF) -------------------------------------------------
-
-def _cc_download():
-    if not _mc_guard():
-        return
-    with ui.dialog() as dlg, ui.card().classes('p-4 gap-2 w-[40rem] max-w-[94vw] dialog-drag'):
-        ui.label('Model Dwnl (HuggingFace → Ollama)').classes('text-lg font-bold text-emerald-400 drag-handle')
-        org_in = ui.input('Provider/Org (e.g. google)').classes('w-full')
-        q_in = ui.input('Search (optional, e.g. gemma)').classes('w-full')
-        prog_lbl = ui.label('').classes('text-xs text-yellow-400 font-mono')
-        auto_imp = ui.checkbox('Auto-import to Ollama', value=True)
-        del_gguf = ui.checkbox('Delete GGUF after import', value=True)
-        _repo = {'id': '', 'files': {}}
-
-        ui.label('Results — click a repo').classes('text-xs text-gray-400 mt-1')
-        res_scroll = ui.scroll_area().classes('w-full h-52 border border-gray-700 rounded')
-        res_col = ui.column().classes('w-full gap-1')
-
-        ui.label('GGUF file — click to select').classes('text-xs text-gray-400 mt-1')
-        file_scroll = ui.scroll_area().classes('w-full h-40 border border-gray-700 rounded')
-        file_col = ui.column().classes('w-full gap-1')
-        _picked_file = {'name': ''}
-
-        def _search():
-            rows = _mc.search_hf_models(org_in.value.strip(), q_in.value.strip())
-            res_col.clear()
-            with res_col:
-                if not rows or (len(rows) == 1 and rows[0][0].startswith(('No models', 'Search failed'))):
-                    ui.label(rows[0][0] if rows else 'No results').classes('text-gray-400 text-xs p-2')
-                for r, dl in rows:
-                    ui.button(
-                        f'{r}  ·  {dl:,} downloads',
-                        on_click=lambda r=r: _pick_repo(r),
-                    ).props('flat dense align=left').classes('w-full justify-start text-xs text-sky-200')
-            ui.notify(f'{len(rows)} result(s)')
-
-        def _pick_repo(repo_id):
-            _repo['id'] = repo_id
-            files = _mc.list_gguf_files(repo_id)
-            _repo['files'] = dict(files)
-            file_col.clear()
-            _picked_file['name'] = ''
-            with file_col:
-                if not files:
-                    ui.label('No GGUF files in this repo').classes('text-gray-400 text-xs p-2')
-                for f, _sz in files:
-                    ui.button(
-                        f,
-                        on_click=lambda f=f: _pick_file(f),
-                    ).props('flat dense align=left').classes('w-full justify-start text-xs text-emerald-200')
-
-        def _pick_file(name):
-            _picked_file['name'] = name
-            ui.notify(f'Selected: {name}')
-
-        def _download():
-            if not _repo['id'] or not _picked_file['name']:
-                ui.notify('Search → click repo → click file first', type='warning')
-                return
-            prog_lbl.text = 'downloading... (minutes for GB files)'
-            import threading
-
-            def _go():
-                def _prog(p):
-                    try:
-                        app_state["dl"] = {
-                            'pct': p,
-                            'label': f"{_repo['id']}/{_picked_file['name']}",
-                            'active': p < 100,
-                        }
-                    except Exception:
-                        pass
-                    try:
-                        prog_lbl.set_text(f'{p}%')
-                    except Exception:
-                        pass
-                ok, msg = _mc.download_hf_file(_repo['id'], _picked_file['name'], str(BASE_DIR),
-                                                auto_import=auto_imp.value,
-                                                delete_after=del_gguf.value,
-                                                on_progress=_prog)
-                try:
-                    app_state["dl"] = {
-                        'pct': 100 if ok else 0,
-                        'label': f"{_repo['id']}/{_picked_file['name']}",
-                        'active': False,
-                    }
-                except Exception:
-                    pass
-                ui.notify(msg, type='positive' if ok else 'negative', timeout=10000)
-                prog_lbl.text = 'done.' if ok else 'failed.'
-            threading.Thread(target=_go, daemon=True).start()
-
-        with ui.row().classes('gap-2 flex-wrap'):
-            ui.button('Search', on_click=_search).classes('bg-emerald-600 text-white')
-            ui.button('Download selected file', on_click=_download).classes('bg-blue-600 text-white')
-        ui.button('Close', on_click=dlg.close).props('flat')
-    dlg.open()
-
-
-# --- 3. Diagnostics ---------------------------------------------------------
-
-def _cc_diag():
-    if not _mc_guard():
-        return
-    with ui.dialog() as dlg, ui.card().classes('p-4 gap-2 min-w-96 dialog-drag'):
-        ui.label('Diagnostics').classes('text-lg font-bold text-emerald-400 drag-handle')
-        out = ui.textarea('').classes('w-full font-mono').props('rows=10 readonly')
-
-        def _run():
-            tags = _mc.ollama_tags()
-            ps = _mc.ollama_ps()
-            g = _mc.scan_gguf_folder(str(BASE_DIR))
-            lines = [f"Ollama reachable: {'yes' if tags else 'NO — start ollama serve?'}",
-                     f"imported models ({len(tags)}): {', '.join(_mc.tag_local(t) for t in tags) or '(none)'}",
-                     f"in RAM ({len(ps)}): {', '.join(m.get('name','?') for m in ps) or '(none)'}",
-                     f"GGUF on disk ({len(g)}): {', '.join(sorted(g)) or '(none)'}"]
-            try:
-                import shutil
-                u = shutil.disk_usage(str(BASE_DIR))
-                lines.append(f"disk free: {u.free // 2**30}G")
-            except Exception:
-                pass
-            out.value = '\n'.join(lines)
-        ui.button('Refresh', on_click=_run).classes('bg-emerald-600 text-white')
-        ui.button('Close', on_click=dlg.close).props('flat')
-    _run()
-    dlg.open()
-
-
-# --- 4. Vault ---------------------------------------------------------------
-
-def _cc_vault():
-    if not HAS_VAULT:
-        ui.notify('auth_store.py missing', type='negative')
-        return
-    with ui.dialog() as dlg, ui.card().classes('p-4 gap-2 min-w-96 dialog-drag'):
-        ui.label('🔑 Credentials Vault').classes('text-lg font-bold text-emerald-400 drag-handle')
-        st_lbl = ui.label('').classes('text-xs font-mono')
-        svc_sel = ui.select([], label='Services').classes('w-full')
-
-        def _refresh():
-            try:
-                unlocked = _vault.is_unlocked()
-            except Exception:
-                unlocked = False
-            st_lbl.text = f"status: {'UNLOCKED' if unlocked else 'LOCKED'}"
-            try:
-                svcs = _vault.services() if unlocked else []
-            except Exception:
-                svcs = []
-            svc_sel.set_options(svcs or ['(locked or empty)'])
-            svc_sel.update()
-
-        def _unlock_create():
-            with ui.dialog() as udlg, ui.card().classes('p-4 gap-2 min-w-72 dialog-drag'):
-                ui.label('🔑 Unlock / Create vault').classes('font-bold text-emerald-400 drag-handle')
-                pw = ui.input('Passphrase', password=True).classes('w-full')
-                pw2 = ui.input('Confirm (create only)', password=True).classes('w-full')
-
-                def _go():
-                    try:
-                        if _vault.is_unlocked():
-                            _vault.lock()
-                            ui.notify('Vault locked')
-                        elif pw2.value:
-                            if pw.value != pw2.value:
-                                ui.notify('Passphrases differ', type='warning')
-                                return
-                            _vault.create_vault(pw.value)
-                            _vault.unlock(pw.value)
-                            ui.notify('Vault created + unlocked', type='positive')
-                        else:
-                            _vault.unlock(pw.value)
-                            ui.notify('Vault unlocked', type='positive')
-                    except Exception as e:
-                        ui.notify(f'Vault error: {e}', type='negative')
-                    udlg.close()
-                    _refresh()
-                ui.button('Unlock / Create / Lock-toggle', on_click=_go).classes('bg-emerald-600 text-white')
-            udlg.open()
-
-        def _add_service():
-            with ui.dialog() as adlg, ui.card().classes('p-4 gap-2 min-w-72 dialog-drag'):
-                ui.label('Add service').classes('font-bold text-emerald-400 drag-handle')
-                name_in = ui.input('Service (e.g. deepseek)').classes('w-full')
-                key_in = ui.input('API key', password=True).classes('w-full')
-                url_in = ui.input('Base URL (optional)').classes('w-full')
-
-                def _save():
-                    try:
-                        _vault.set_credential(name_in.value.strip(), 'api_key', key_in.value)
-                        if url_in.value.strip():
-                            _vault.set_credential(name_in.value.strip(), 'base_url', url_in.value.strip())
-                        ui.notify(f"Service '{name_in.value.strip()}' saved", type='positive')
-                    except Exception as e:
-                        ui.notify(f'Save error: {e}', type='negative')
-                    adlg.close()
-                    _refresh()
-                ui.button('Save service', on_click=_save).classes('bg-emerald-600 text-white')
-            adlg.open()
-
-        def _delete_service():
-            s = svc_sel.value
-            if not s or s.startswith('(locked'):
-                ui.notify('Pick a service first', type='warning')
-                return
-            try:
-                _vault.remove_service(s)
-                ui.notify(f"Service '{s}' removed")
-            except Exception as e:
-                ui.notify(f'Delete error: {e}', type='negative')
-            _refresh()
-
-        def _test_email():
-            try:
-                ok, msg = _vault.send_test_email()
-                ui.notify(msg, type='positive' if ok else 'negative', timeout=8000)
-            except Exception as e:
-                ui.notify(f'Email error: {e}', type='negative')
-
-        def _import_opencode():
-            if not _mc_guard():
-                return
-            ok, msg = _mc.import_from_opencode()
-            ui.notify(msg, type='positive' if ok else 'negative', timeout=8000)
-            _refresh()
-
-        with ui.row().classes('gap-2 flex-wrap'):
-            ui.button('Unlock / Create', on_click=_unlock_create).classes('bg-emerald-600 text-white')
-            ui.button('Lock now', on_click=lambda: (_vault.lock(), _refresh(), ui.notify('Vault locked'))).classes('bg-gray-600 text-white')
-            ui.button('Add service', on_click=_add_service).classes('bg-blue-600 text-white')
-            ui.button('Delete service', on_click=_delete_service).props('color=red')
-            ui.button('Test email', on_click=_test_email).classes('bg-purple-600 text-white')
-            ui.button('⬇ Import from opencode', on_click=_import_opencode).classes('bg-teal-600 text-white')
-        ui.button('Close', on_click=dlg.close).props('flat')
-    _refresh()
-    dlg.open()
+    with ui.column().classes('w-full px-4 pb-4'):
+        _hmc.build_bottom_bar()
 
 
 # ============================================================
 # START HARMONY
 # ============================================================
 
+# HTTPS (self-signed) so the browser mic (getUserMedia) works over LAN.
+# Falls back to plain HTTP if the certs are absent. Generate with:
+#   openssl req -x509 -newkey rsa:2048 -keyout certs/key.pem \
+#     -out certs/cert.pem -days 3650 -nodes -subj "/CN=192.168.0.6" \
+#     -addext "subjectAltName=IP:192.168.0.6,DNS:localhost,IP:127.0.0.1"
+_ssl_kwargs = {}
+try:
+    _cert = os.path.join(str(BASE_DIR), 'certs', 'cert.pem')
+    _key = os.path.join(str(BASE_DIR), 'certs', 'key.pem')
+    if os.path.isfile(_cert) and os.path.isfile(_key):
+        _ssl_kwargs = {'ssl_certfile': _cert, 'ssl_keyfile': _key}
+except Exception:
+    pass
+
 ui.run(
+    host='0.0.0.0',
     port=8080,
     title='Harmony AI aichat',
     show=False,
     reload=False,
+    **_ssl_kwargs,
 )

@@ -51,12 +51,20 @@ start() {
 
 stop() {
     if [ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null; then
+        # Wait for it to actually exit (NiceGUI shutdown can take ~2s), so a
+        # following `start` never sees the dying process as "already running".
+        _pid="$(cat "$PIDFILE")"
+        for _i in $(seq 1 20); do
+            kill -0 "$_pid" 2>/dev/null || break
+            sleep 0.3
+        done
         rm -f "$PIDFILE"
         echo "stopped"
         return 0
     fi
     # fallback: no pidfile — match the script by name
     if pkill -f "harmony-ai.py"; then
+        sleep 2
         rm -f "$PIDFILE"
         echo "stopped (by name)"
         return 0

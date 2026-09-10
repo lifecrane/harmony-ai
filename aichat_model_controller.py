@@ -965,40 +965,43 @@ def import_from_opencode():
 def download_hf_file(repo_id, filename, base_dir, known_size_bytes=0,
                      auto_import=True, delete_after=True, on_progress=None):
     """Download ONE GGUF into Models/{org}/{repo}/. BLOCKS (thread it).
+
+    Streams with requests so on_progress(pct) reports real bytes-downloaded
+    progress (the HF hub helper hides the temp file, which broke polling).
     Returns (ok, msg)."""
-    try:
-        from huggingface_hub import hf_hub_download
-    except Exception:
-        return False, "huggingface_hub not installed (pip install huggingface_hub)"
+    if requests is None:
+        return False, "requests missing"
     org = repo_id.split('/')[0] if '/' in repo_id else 'misc'
     repo = repo_id.split('/')[-1]
     target_dir = os.path.join(_gguf_root(base_dir), org, repo)
     os.makedirs(target_dir, exist_ok=True)
-
-    def _prog(path, total_hint=0):
-        if on_progress:
-            try:
-                sz = os.path.getsize(path) if os.path.isfile(path) else 0
-                base = known_size_bytes or total_hint or 1
-                on_progress(min(99, int(sz * 100 / base)))
-            except Exception:
-                pass
-
+    target = os.path.join(target_dir, filename)
+    url = f"https://huggingface.co/{repo_id}/resolve/main/{filename}"
     try:
-        if on_progress:
-            on_progress(1)
-        local = hf_hub_download(repo_id=repo_id, filename=filename,
-                                local_dir=target_dir, local_dir_use_symlinks=False)
+        with requests.get(url, stream=True, timeout=(10, 360)) as r:
+            r.raise_for_status()
+            total = int(r.headers.get('content-length', 0)) or known_size_bytes or 0
+            done = 0
+            tmp = target + '.part'
+            with open(tmp, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                    if not chunk:
+                        continue
+                    f.write(chunk)
+                    done += len(chunk)
+                    if total and on_progress:
+                        on_progress(max(1, min(99, int(done * 100 / total))))
+            os.replace(tmp, target)
         if on_progress:
             on_progress(100)
-        msg = f"Downloaded to {local}"
+        msg = f"Downloaded to {target}"
         if auto_import:
             name = normalize_model_name(filename, _gguf_root(base_dir))
-            ok = import_single_model(name, local, on_line=on_progress if callable(on_progress) else None)
+            ok = import_single_model(name, target, on_line=on_progress if callable(on_progress) else None)
             msg += f" + imported as {name}" if ok else " (import FAILED)"
             if ok and delete_after:
                 try:
-                    os.remove(local)
+                    os.remove(target)
                     msg += " + GGUF deleted"
                 except Exception:
                     pass
