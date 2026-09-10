@@ -340,7 +340,11 @@ app_state = {
     "hat": "EXPLORE",
     "last_doc": None,
     "keep_chat_logs": True,
+    "great_thoughts": True,
 }
+
+# Prompts sent while a model is still running wait here (FIFO). /stop bypasses.
+_chat_queue = []
 
 
 def save_settings():
@@ -1541,6 +1545,13 @@ _TIGHT_SUMMARY_WORDS = (
     'one sentence', 'briefly', 'really short', 'as short as',
 )
 
+# Third gate — "very short" compresses further than plain "short".
+_VERY_SHORT_SUMMARY_WORDS = (
+    'very short', 'one line', 'one sentence', 'ultra short', 'ultrashort',
+    'super short', 'a few words', 'few words', 'tiny', 'diminutive',
+    'very few words', 'as short as',
+)
+
 # Expand-direction intensity (mirror of summarize). Plain "explain/expand" is
 # idea-level; "expand more / even more" asks for a structured breakdown; the
 # technical/exhaustive phrasings ask for concrete minutiae (exec-level detail).
@@ -1570,14 +1581,62 @@ def detect_hat(prompt: str) -> str:
 
 
 def _summarize_target(prompt: str) -> str:
-    """Return the shorten-intensity target for a summarize request.
+    """Return the shorten-intensity target — 3 gates.
 
-    'summarize' alone -> SHORT PARAGRAPH. Any tight trigger -> ONE SENTENCE.
+    summary          -> SHORT PARAGRAPH
+    short summary    -> 2-3 short sentences
+    very short       -> ONE SENTENCE
     """
     p = (prompt or '').lower()
+    if any(w in p for w in _VERY_SHORT_SUMMARY_WORDS):
+        return ('ONE SENTENCE (strictly — no bullets, no open question, '
+                'no extra notes)')
     if any(w in p for w in _TIGHT_SUMMARY_WORDS):
-        return 'ONE SENTENCE (or up to 3 short bullets)'
-    return 'SHORT PARAGRAPH'
+        return '2-3 SHORT SENTENCES (no bullets, no open question)'
+    return 'SHORT PARAGRAPH (3-5 sentences, no open question)'
+
+
+# JSON/schema/report leakage — never wanted in ANY answer (the model
+# fabricates "Write a detailed report… Schema:… Response:…" blocks).
+_RUNAWAY_JSON = (
+    'schema:', 'response:', 'additional comments:', 'json output',
+    'json schema', 'write a detailed report', 'write a comprehensive report',
+    'write a short essay',
+)
+
+# Report/plan tails — cut for conversational hats, but kept for EXPERT /
+# STRUCTURE where a full breakdown is explicitly requested.
+_RUNAWAY_REPORT = (
+    'subsequent actions', 'conclusion:', 'extra notes',
+    'additional information', 'further enhancements', 'additional notes',
+    'next steps', 'action items', 'final answer',
+    'recommendations for future',
+)
+
+
+def _enforce_summary_length(text, prompt):
+    """Cut runaway structured tails the model appends after answering.
+
+    Weak models (e.g. 2.6B) drift into blog/plan/JSON-schema output after the
+    real answer. JSON/schema markers are cut everywhere; report/plan markers
+    are cut for every hat except EXPERT/STRUCTURE. The answer itself (incl.
+    its closing open question) is left untouched. Never raises.
+    """
+    try:
+        low = text.lower()
+        cut = len(text)
+        headers = list(_RUNAWAY_JSON)
+        if app_state.get('hat') not in ('EXPERT', 'STRUCTURE'):
+            headers += list(_RUNAWAY_REPORT)
+        for h in headers:
+            i = low.find('\n' + h)
+            if i == -1:
+                i = low.find('\n' + h + ':')
+            if i != -1 and i < cut:
+                cut = i
+        return text[:cut].strip()
+    except Exception:
+        return text
 
 
 def _explain_depth(prompt: str) -> str:
@@ -1620,6 +1679,13 @@ def _state_line(prompt: str) -> str:
     lines.append(
         "(Stay in this role; the hat may switch each turn without changing role.)"
     )
+    if not app_state.get("great_thoughts", True):
+        # Placed LAST (recency) and worded as a hard override of the role's
+        # "end with one question" rule — a weak model otherwise ignores it.
+        lines.append(
+            "OVERRIDE: Do NOT end with any question, 'what if', or open thought. "
+            "Give only the facts and stop. No `~` question."
+        )
     return '\n'.join(lines)
 
 
@@ -1681,6 +1747,28 @@ _LISTING_WORDS = (
 )
 
 
+def _names_a_file(prompt: str) -> bool:
+    """True if the prompt names a file (extension word, or a real filename in
+    the active project). Used so a bare "summary of quantum physics" does NOT
+    inject the project/task-order block (that's what tips a small model into
+    generating a task schema)."""
+    p = (prompt or '').lower()
+    try:
+        if re.search(
+            r'[\w\-]+\.(md|txt|py|json|yaml|yml|sh|html|css|js|ts|csv|tsv|'
+            r'gguf|bin|toml|ini|pdf|drawio|svg|png|jpg)\b', p):
+            return True
+        proj = app_state.get("active_project")
+        if proj:
+            base = BASE_DIR / 'WORKSPACE' / proj
+            for f in base.iterdir():
+                if f.is_file() and f.stem.lower() in p.split():
+                    return True
+    except Exception:
+        pass
+    return False
+
+
 def _references_project(prompt: str) -> Optional[str]:
     """Return the project name the prompt is about, or None if it isn't about
     any project (e.g. a general topic like quantum physics).
@@ -1702,12 +1790,13 @@ def _references_project(prompt: str) -> Optional[str]:
     if any(w in p for w in _DEIXIS_WORDS) or any(w in p for w in _LISTING_WORDS) \
             or any(w in p for w in _TASK_STATUS_WORDS):
         return app_state.get("active_project")
-    # Doc-action verbs ("summarize cheatsheet", "explain ideas") name a FILE,
-    # not a project — but they still need the active project's file list,
-    # otherwise the model answers with zero context and invents "no files".
-    if any(v in p for v in ('summar', 'explain', 'describe', 'read this',
-                            'extract', 'attach')):
-        return app_state.get("active_project")
+    # Doc-action verbs only count when the prompt also names a real project
+    # FILE (e.g. "summarize cheatsheet", "explain ideas.md"). A bare
+    # "summary of quantum physics" must NOT inject the task-order block —
+    # that's what tips a small model into generating a task schema.
+    for _v in ('summar', 'explain', 'describe', 'extract', 'attach'):
+        if _v in p and _names_a_file(p):
+            return app_state.get("active_project")
     return None
 
 
@@ -1793,8 +1882,42 @@ def clean_model_output(text: str) -> str:
     # imitates the machinery ("HAT: Can you delve into HART..."). These are
     # never user-facing content — drop any line starting with a control label.
     text = re.sub(r'(?im)^\s*(ROLE|HAT|MODE|LENGTH|DEPTH|TOPIC PIN|CURRENT REQUEST)\s*:.{0,400}$', '', text)
+    # Cut runaway JSON/schema tails — always unwanted in chat output, and this
+    # runs on every path (streaming, final, and /stop partial alike).
+    _low = text.lower()
+    _cut = len(text)
+    for _h in ('\nschema:', '\nresponse:', '\nadditional information:',
+               '\nadditional comments:', '\nproperties:', '\njson output'):
+        _i = _low.find(_h)
+        if _i != -1 and _i < _cut:
+            _cut = _i
+    text = text[:_cut]
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
+
+
+def _italicize_thoughts(text: str) -> str:
+    """Normalise the closing question to its own line, in italics.
+
+    The brainstorm role tags its closing open question with `~`. The model
+    sometimes wraps it as `~question~` inline and sometimes as a `~`-prefixed
+    line. Either way: a blank line, then `*~ question*` (italic), so readers
+    can tell it is a creative "what if", not a factual claim. Never raises.
+    """
+    try:
+        def _fmt(q):
+            q = (q or '').strip().strip('~').strip()
+            return f"\n\n*~ {q}*" if q else ''
+
+        # 1) inline tilde-wrapped: ~question~
+        text = re.sub(r'~([^~\n]+)~', lambda m: _fmt(m.group(1)), text)
+        # 2) leading tilde, no closing tilde (question ends with '?')
+        text = re.sub(r'~([^~\n]*?\?)', lambda m: _fmt(m.group(1)), text)
+        # 3) tilde-prefixed line: ~ question
+        text = re.sub(r'(?m)^\s*~\s*(.+)$', lambda m: _fmt(m.group(1)), text)
+        return text.strip()
+    except Exception:
+        return text
 
 
 # ============================================================
@@ -2413,6 +2536,19 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                 ).classes(
                     'text-xs text-purple-400 font-semibold ml-2'
                 ).tooltip('Show the model reasoning block above answers')
+                gt_checkbox = ui.checkbox(
+                    '💭 great thoughts',
+                    value=app_state.get('great_thoughts', True),
+                    on_change=lambda e: app_state.__setitem__(
+                        'great_thoughts', bool(e.value)),
+                ).props(
+                    'dark'
+                ).classes(
+                    'text-xs text-pink-400 font-semibold ml-2'
+                ).tooltip(
+                    'End answers with a creative open question (ethics/'
+                    'philosophy flourish). Off = just the facts, no question.'
+                )
                 debug_checkbox = ui.checkbox(
                     'Debug Detail'
                 ).props(
@@ -2475,6 +2611,14 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                     'w-full font-mono text-sm break-words'
                 )
 
+                # Live streaming text lives in its own element so selecting
+                # text in the committed history still works while typing.
+                streaming_md = ui.markdown('').classes(
+                    'bg-black text-green-400 px-4 w-full '
+                    'font-mono text-sm break-words'
+                )
+                streaming_md.visible = False
+
             def _agent_label():
                 role = app_state.get('role', 'brainstorm')
                 init = _ROLE_INITIAL.get(role, 'B')
@@ -2484,6 +2628,18 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                         f"<span style='{style}'>Harmony AI {init}</span>")
 
             def render_chat(streaming_text=None):
+                # Live streaming renders into a separate element so the
+                # committed history isn't rebuilt every tick (which would kill
+                # text selection while the model is typing).
+                if streaming_text is not None:
+                    streaming_md.set_content(
+                        f"**{_agent_label()}:**\n\n{streaming_text}"
+                    )
+                    streaming_md.visible = True
+                    chat_scroll.scroll_to(percent=1.0)
+                    return
+
+                streaming_md.visible = False
                 md_blocks = []
                 for msg in chat_messages:
                     role = msg['role']
@@ -2512,25 +2668,20 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                             md_blocks.append(
                                 f"**{init}:**\n\n{text}"
                             )
-                if streaming_text is not None:
-                    md_blocks.append(
-                        f"**{_agent_label()}:**\n\n{streaming_text}"
-                    )
 
                 if not md_blocks:
                     output_display.set_content('Ready for input...')
                 else:
                     output_display.set_content('\n\n---\n\n'.join(md_blocks))
                 chat_scroll.scroll_to(percent=1.0)
-                if streaming_text is None:
-                    try:
-                        _refresh_info()
-                    except Exception:
-                        pass
-                    try:
-                        _flush_chat_log()
-                    except Exception:
-                        pass
+                try:
+                    _refresh_info()
+                except Exception:
+                    pass
+                try:
+                    _flush_chat_log()
+                except Exception:
+                    pass
 
             # ------------------------------------------------
             # INPUT
@@ -2674,6 +2825,31 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                     sugg_col.update()
                 except Exception:
                     pass
+
+                def _do_stop():
+                    prompt_input.value = ''
+                    prompt_input.update()
+                    chat_messages.append({'role': 'user', 'text': prompt})
+                    _proc = app_state.get("process")
+                    _dropped = len(_chat_queue)
+                    _chat_queue.clear()
+                    if _proc is not None:
+                        # Kill it; the interrupted run commits its partial text
+                        # with a "🛑 stopped" marker (no data loss).
+                        app_state["stop_requested"] = True
+                        try:
+                            _proc.kill()
+                        except Exception:
+                            pass
+                    else:
+                        chat_messages.append({
+                            'role': 'assistant',
+                            'text': f"🛑 Nothing running"
+                                    + (f" — cleared {_dropped} queued" if _dropped else "")
+                                    + f".\n\n⏱ {_fmt_dur(time.time() - t0)}",
+                            'label': _agent_label(),
+                        })
+                        render_chat()
 
                 # --- SLASH ALIASES (command strip) ---
                 if prompt == '/help':
@@ -2864,6 +3040,10 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                 # ------------------------------------------------
                 if prompt.startswith('!'):
                     shell_cmd = prompt[1:].strip()
+                    # !stop / !abort / !cancel = priority interrupt (not shell)
+                    if shell_cmd.lower() in ('stop', 'abort', 'cancel'):
+                        _do_stop()
+                        return
                     if not shell_cmd:
                         ui.notify('Empty shell command', type='warning')
                         return
@@ -3014,13 +3194,29 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                     render_chat()
                     return
 
-                # Prevent accidentally launching multiple
-                # model processes at once.
+                # ------------------------------------------------
+                # STOP (/stop, /abort, !stop, !abort — priority interrupt)
+                # ------------------------------------------------
+                if prompt in ('/stop', '!stop', '/abort', '!abort',
+                              '/cancel', '!cancel'):
+                    _do_stop()
+                    return
+
+                # A model is already running — queue this prompt instead of
+                # launching a second process. /stop still jumps the line.
                 if app_state["process"] is not None:
+                    _chat_queue.append(prompt)
+                    prompt_input.value = ''
+                    prompt_input.update()
+                    chat_messages.append({
+                        'role': 'user',
+                        'text': f'⏳ (queued) {prompt}',
+                    })
                     ui.notify(
-                        'A model process is already running.',
-                        type='warning'
+                        f'Queued ({len(_chat_queue)} waiting): {prompt[:40]}',
+                        type='info'
                     )
+                    render_chat()
                     return
 
                 # Clear the box immediately so the user can keep typing.
@@ -3029,14 +3225,25 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
 
                 # Record the user's turn in the visible history.
                 chat_messages.append({'role': 'user', 'text': prompt})
+                # Render the committed history NOW so the user's prompt shows
+                # immediately (the streaming element only starts on first token).
+                render_chat()
 
                 full_prompt = build_model_prompt(prompt)
                 _refresh_hat_label()
 
+                # "💭 great thoughts" OFF → use the facts-only role (no closing
+                # question). The role is the SYSTEM prompt, so a user-message
+                # override can't beat it — swap the role file instead.
+                _run_role = app_state["role"]
+                if not app_state.get("great_thoughts", True) \
+                        and _run_role == 'brainstorm':
+                    _run_role = 'brainstorm_facts'
+
                 cmd = [
                     _aichat_bin(),
                     '-r',
-                    app_state["role"],
+                    _run_role,
                     '-s',
                     app_state["role"],
                 ]
@@ -3194,6 +3401,27 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
 
                     await process.wait()
 
+                    # A /stop interrupted this run — keep the partial text that
+                    # already streamed (don't drop it), tag it stopped, and bail.
+                    if app_state.get("stop_requested"):
+                        app_state["stop_requested"] = False
+                        _partial = clean_model_output(
+                            ''.join(stdout_buffer)
+                        ).strip()
+                        _partial = _enforce_summary_length(_partial, prompt)
+                        _partial = _italicize_thoughts(_partial)
+                        _elapsed = time.time() - _t0
+                        chat_messages.append({
+                            'role': 'assistant',
+                            'text': (_partial
+                                     + f'\n\n🛑 stopped · ⏱ {_fmt_dur(_elapsed)}'
+                                     if _partial
+                                     else f'🛑 stopped · ⏱ {_fmt_dur(_elapsed)}'),
+                            'label': _agent_label(),
+                        })
+                        render_chat()
+                        return
+
                     await stderr_task
 
                     final_output = clean_model_output(
@@ -3207,6 +3435,13 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                     # Honesty gate: a long answer sharing zero words with the
                     # request is a confabulation, not an answer — ask instead.
                     final_output = honesty_gate(final_output, prompt)
+
+                    # Enforce the SUMMARIZE length gate: cut any blog/plan
+                    # sections the model appended after the summary.
+                    final_output = _enforce_summary_length(final_output, prompt)
+
+                    # `~ question` → italic philosophical flourish.
+                    final_output = _italicize_thoughts(final_output)
 
                     stderr_output = ''.join(
                         stderr_buffer
@@ -3316,6 +3551,13 @@ with ui.column().classes('w-full h-screen bg-gray-900 text-gray-100 p-4'):
                 finally:
 
                     app_state["process"] = None
+
+                    # Drain the FIFO queue: fire the next waiting prompt.
+                    if _chat_queue:
+                        _nxt = _chat_queue.pop(0)
+                        prompt_input.value = _nxt
+                        prompt_input.update()
+                        asyncio.create_task(run_aichat())
 
         # ====================================================
         # INFO PANEL (session info column, right side)

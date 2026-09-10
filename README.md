@@ -12,6 +12,28 @@ This is an evolving project, still a few more UI things to polish, such as bette
 
 ---
 
+## Release notes
+
+**v0.2 — model foundation** (verified on `Gemma-unsloth-q5-k-m:latest`, 2.6B)
+
+- **Models Control Center** (collapsible bottom bar, 3 cards): 🧠 Local Default
+  Model (bench · team-check · ⚡ ping), 📥 Hugging Face Downloader (search →
+  repo → GGUF → auto-import with progress), 🔑 Credentials Vault
+  (gpg-encrypted).
+- **Message queue + priority stop** — prompts queue (FIFO) while the model is
+  busy; `/stop` · `!stop` · `/abort` · `!cancel` interrupt immediately and clear
+  the queue, keeping the partial output.
+- **Voice input** — hold the 🎙️ mic; Whisper transcribes and sends (HTTPS /
+  localhost).
+- **Hat gates** — summary / short summary / very short summary collapse to
+  shorter lengths; runaway JSON/schema/report tails are auto-cut.
+- **`💭 great thoughts` toggle** — ends answers with a `~` *italic* open question
+  (a creative flourish, clearly flagged so it is not mistaken for fact); turn it
+  off for facts-only answers (swaps to the `brainstorm_facts` role).
+- **HTTPS** — self-signed cert in `certs/` so the browser mic works over LAN.
+
+---
+
 ## Quick start
 
 ```bash
@@ -187,6 +209,32 @@ Role handoffs (explicit):
 - want a committed ordered plan → say `switch to .role plan` (or click PLAN)
 - want actual code → `switch to .role exec` (or click EXEC)
 - review output → `switch to .role qc`
+
+---
+
+## Model foundation, queue & stop
+
+- **Models Control Center** — collapsible bottom bar with 3 cards: 🧠 **Local
+  Default Model** (select · bench · team-check · ⚡ ping), 📥 **Hugging Face
+  Downloader** (search → repo → GGUF → auto-import, with progress), 🔑
+  **Credentials Vault** (gpg-encrypted keys). Engine code lives in
+  `harmony_model_center.py`.
+- **Message queue** — a prompt sent while the model is running is queued
+  (FIFO) and fires when the current turn finishes. No more "already running"
+  rejections.
+- **Priority stop** — `/stop` · `/abort` · `!stop` interrupts the running model
+  immediately and clears the queue.
+- **Voice input** — hold the 🎙️ mic; Whisper transcribes to the box and sends
+  (HTTPS / localhost only).
+
+### "Great thoughts" (closing question) — ethics flag
+
+The brainstormer ends substantial answers with a short open question, often an
+ethics/philosophy angle. **That is a creative flourish, not a factual claim** —
+it does not mean the model has opinions or consciousness. It is tagged with a
+`~` prefix and rendered in *italics* so readers can tell it apart from the
+facts. A top-bar toggle (`💭 great thoughts`) turns it off; then answers just
+stop at the facts.
 
 ---
 

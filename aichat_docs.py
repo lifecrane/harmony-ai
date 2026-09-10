@@ -437,6 +437,8 @@ COMMANDS = [
     {'cmd': '/pdf --page 1 --last 1 --insert', 'desc': 'Last para of page 1 → next prompt'},
     {'cmd': '/flow', 'desc': 'Open the project Flow Board'},
     {'cmd': '/clear', 'desc': 'Reset the conversation (forget previous subject)'},
+    {'cmd': '/stop', 'desc': 'Interrupt the running model now (priority)'},
+    {'cmd': '!stop', 'desc': 'Same as /stop (also !abort / !cancel)'},
     {'cmd': '/help', 'desc': 'Show all commands here'},
     {'cmd': '!ls -la', 'desc': 'List this folder (shell, instant)'},
     {'cmd': '!cat <file>', 'desc': 'Show a text file (shell, instant)'},
