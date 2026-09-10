@@ -42,6 +42,13 @@ bash Install-harmony-ai.sh --check    # verify only, changes nothing
 ./run_panel.sh start             # panel on http://localhost:8080
 ```
 
+> 🎙️ Mic needs HTTPS: browsers only allow the microphone in a secure
+> context, so open the panel at `https://127.0.0.1:8080` (or
+> `https://localhost:8080`) and click through the self-signed-cert
+> warning (`certs/`). Same for `https://192.168.0.6:8080` on this box.
+> Plain `http://` mutes the mic; other machines' LAN IPs warn on the
+> name too — use `localhost`/`127.0.0.1` there.
+
 The installer ends by downloading the two models the panel needs, so it works
 out of the box on a fresh machine:
 

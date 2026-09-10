@@ -447,6 +447,25 @@ def set_aichat_model(name, config_path=None):
                            f'{entry_indent}- name: {clean}')
                 out.insert(models_idx + 2,
                            f'{entry_indent}  max_input_tokens: {ctx}')
+        else:
+            # No `name: ollama` entry. Two cases:
+            #  a) stub config with no `clients:` at all → append a minimal
+            #     clients block (verified against a model-line-only file).
+            #  b) `clients:` exists (other providers) but no ollama entry →
+            #     append an ollama list ITEM, never a second `clients:` key
+            #     (a duplicate top-level `clients:` kills every aichat run).
+            has_clients = any(
+                re.match(r'^\s*clients\s*:\s*(#.*)?$', ln) for ln in out)
+            if not has_clients:
+                out.append('')
+                out.append('clients:')
+            out.append('  - type: openai-compatible')
+            out.append('    name: ollama')
+            out.append('    api_base: http://localhost:11434/v1')
+            out.append('    api_key: ollama')
+            out.append('    models:')
+            out.append(f'      - name: {clean}')
+            out.append(f'        max_input_tokens: {ctx}')
 
     try:
         with open(path, 'w', encoding='utf-8') as f:
